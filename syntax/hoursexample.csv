@@ -1,0 +1,23 @@
+id,workhours,scenario
+1,37.5,given example
+2,20,given example
+3,45 unless called in,given example
+4,as little as possible - 7.5,given example
+5,94 hours over 2 weeks,given example
+6,30-35 hours,given example
+7,30hours,hours but with no separation of numeric and text
+8,0.5,partial hours but with leading zero
+9,worked .5 hours,partial hours but with no leading zero
+10,worked 12.3.4 hours,decimal error
+11,"7,5 hours",hours but with comma (could be error)
+12,30 hours,hours plus text
+13,100 hours,hours but exceeds logical value per two weeks
+14,five hours,hours but in text format
+15,twenty hours,hours but in text format
+16,worked twenty hours,hours but in text format
+17,twentyhours,hours but in text format with no separation of text
+18,"40 some weeks, but 20 others",two potential hours
+19,"40 week 1, 30 week 2, 20 week 1","three potential hours, but other numbers included"
+20,"20 jan 1st, 30 jan 7th, 40 jan 14th, 10 jan 21st","four potential hours, but other numbers included"
+21,null,null test
+22,12345,null test
