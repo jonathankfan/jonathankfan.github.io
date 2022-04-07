@@ -33,11 +33,11 @@ See here for published paper: https://raw.githubusercontent.com/jonathankfan/jon
 /****************************************************************************************************/
 /****************************************************************************************************/
 
-global projectfolder "[INSERT FILE PATH HERE]\IPTW\"
+global projectfolder "C:\"
 
 /*
 capture noisily log close
-log using "[INSERT FILE PATH HERE]\logname.log", replace
+log using "$projectfolder\logname.log", replace
 */
 
 /****************************************************************************************************/
@@ -110,17 +110,17 @@ generate jobcontrol=wstdski+wstdaut
 
 /*Job control (combination of skill discretion and decision authority) - binary*/
 sum jobcontrol, d
-generate jobcontrol_high=1 if jobcontrol>=8 & jobcontrol!=.
-replace jobcontrol_high=0 if jobcontrol<8 & jobcontrol!=.
-tab jobcontrol jobcontrol_high
+generate jobcontrol_binary=1 if jobcontrol>=8 & jobcontrol!=.
+replace jobcontrol_binary=0 if jobcontrol<8 & jobcontrol!=.
+tab jobcontrol jobcontrol_binary
 
 /*Job control (combination of skill discretion and decision authority) - categorical, based on quantiles of the data*/
 generate jobcontrol_q4=1 if jobcontrol>=0 & jobcontrol<5
-replace jobcontrol_q4=2 if jobcontrol>=6 & jobcontrol<7
-replace jobcontrol_q4=3 if jobcontrol>=8 & jobcontrol<9
-replace jobcontrol_q4=4 if jobcontrol>=10 & jobcontrol!=.
+replace jobcontrol_q4=2 if jobcontrol>=5 & jobcontrol<7
+replace jobcontrol_q4=3 if jobcontrol>=7 & jobcontrol<9
+replace jobcontrol_q4=4 if jobcontrol>=9 & jobcontrol!=.
 tab jobcontrol_q4
-tab jobcontrol jobcontrol_q4
+tab jobcontrol jobcontrol_q4, missing
 
 /****************************************************************************************************/
 /****************************************************************************************************/
@@ -136,26 +136,27 @@ tab jobcontrol jobcontrol_q4
 	/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
 	/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
 	/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
+	logistic jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
 	svyset [pweight=wts_m]
-	svy: logistic jobcontrol_high wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
+	svy: logistic jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
 	capture drop pscore
 	predict pscore, pr
 
 	/*unweighted - do not use
-	logistic jobcontrol_high wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
+	logistic jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
 	capture drop pscore
 	predict pscore, pr
 	*/
 
 		/*note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5*/
-		logistic jobcontrol_high wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
+		logistic jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
 		lroc
-		roctab jobcontrol_high pscore
+		roctab jobcontrol_binary pscore
 		generate pr_true=1 if pscore>=.5 & pscore!=.
 		replace pr_true=0 if pscore<.5
-		tab pr_true jobcontrol_high, chi2
-		tab pr_true jobcontrol_high, col nofreq chi2
-		tab pr_true jobcontrol_high, row nofreq chi2
+		tab pr_true jobcontrol_binary, chi2
+		tab pr_true jobcontrol_binary, col nofreq chi2
+		tab pr_true jobcontrol_binary, row nofreq chi2
 		dis (4704+2194)/10535
 		drop pr_true
 
@@ -167,69 +168,73 @@ tab jobcontrol jobcontrol_q4
 		/*check region of common support, i.e., positivity assumption*/
 		/*if there are regions outside of common support, then we could use pscore matching with calipers or restrict IPTW analysis to region of common support (or to pscores within 0.1 to 0.9), to reduce bias (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5564952)*/
 		/*note: the teffects and mmws overlap plots will produce the same*/
-		hist pscore, by(jobcontrol_high)
-		kdensity pscore if jobcontrol_high==0, addplot(kdensity pscore if jobcontrol_high==1)
+		hist pscore, by(jobcontrol_binary)
+		kdensity pscore if jobcontrol_binary==0, addplot(kdensity pscore if jobcontrol_binary==1)
 
 			/*violations of positivity: these observations have low job control (low probability of having high job control) - individuals are all similar, but low common support, as we want some individuals with high job control to match with those who have low job control*/
 			gsort -pscore
-			brow jobcontrol_high pscore wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex dhhgms dhhghsz dhhgdwe if pscore<0.2
-			tab pscore jobcontrol_high if pscore<0.2
+			brow jobcontrol_binary pscore wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex dhhgms dhhghsz dhhgdwe if pscore<0.2
+			tab pscore jobcontrol_binary if pscore<0.2
 
 			/*violations of positivity: these observations have high job control (high probability of having high job control) - individuals are all similar, but low common support, as we want some individuals with low job control to match with those who have high job control*/
 			gsort -pscore
-			brow jobcontrol_high pscore wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex dhhgms dhhghsz dhhgdwe if pscore>0.95 & pscore!=.
-			tab pscore jobcontrol_high if pscore>0.95 & pscore!=.
+			brow jobcontrol_binary pscore wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex dhhgms dhhghsz dhhgdwe if pscore>0.95 & pscore!=.
+			tab pscore jobcontrol_binary if pscore>0.95 & pscore!=.
 
 		/*check mean of pscore by treatment, within strata of pscore*/
 		xtile pscore_q5=pscore, nq(5)
 		tabstat pscore, by(pscore_q5) statistics(n min max)
 
 			/*the distributions look equivalent within strata of pscore*/
-			kdensity pscore if jobcontrol_high==0, addplot(kdensity pscore if jobcontrol_high==1)
-			kdensity pscore if jobcontrol_high==0 & pscore_q5==1, addplot(kdensity pscore if jobcontrol_high==1 & pscore_q5==1)
-			kdensity pscore if jobcontrol_high==0 & pscore_q5==2, addplot(kdensity pscore if jobcontrol_high==1 & pscore_q5==2)
-			kdensity pscore if jobcontrol_high==0 & pscore_q5==3, addplot(kdensity pscore if jobcontrol_high==1 & pscore_q5==3)
-			kdensity pscore if jobcontrol_high==0 & pscore_q5==4, addplot(kdensity pscore if jobcontrol_high==1 & pscore_q5==4)
-			kdensity pscore if jobcontrol_high==0 & pscore_q5==5, addplot(kdensity pscore if jobcontrol_high==1 & pscore_q5==5)
-			bysort pscore_q5: tabstat pscore, by(jobcontrol_high) statistics(n min mean max)
+			kdensity pscore if jobcontrol_binary==0, addplot(kdensity pscore if jobcontrol_binary==1)
+			kdensity pscore if jobcontrol_binary==0 & pscore_q5==1, addplot(kdensity pscore if jobcontrol_binary==1 & pscore_q5==1)
+			kdensity pscore if jobcontrol_binary==0 & pscore_q5==2, addplot(kdensity pscore if jobcontrol_binary==1 & pscore_q5==2)
+			kdensity pscore if jobcontrol_binary==0 & pscore_q5==3, addplot(kdensity pscore if jobcontrol_binary==1 & pscore_q5==3)
+			kdensity pscore if jobcontrol_binary==0 & pscore_q5==4, addplot(kdensity pscore if jobcontrol_binary==1 & pscore_q5==4)
+			kdensity pscore if jobcontrol_binary==0 & pscore_q5==5, addplot(kdensity pscore if jobcontrol_binary==1 & pscore_q5==5)
+			bysort pscore_q5: tabstat pscore, by(jobcontrol_binary) statistics(n min mean max)
 
 /**************************************************/
 /*next, generate itpw weights using the propensity score*/
 /**************************************************/
 
-	/*use 1/1-pr for control group, which the same as using the reverse scored outcome to generate pr followed by 1/pr*/
-	/*note, this formula same as above, but in one line: generate iptw=(jobcontrol_high/pscore) + ((1-jobcontrol_high)/(1-pscore))*/
-	capture drop iptw
-	generate iptw=1/pscore if jobcontrol_high==1
-	replace iptw=1/(1-pscore) if jobcontrol_high==0
-	sum iptw, d
-	/*check total weighted population - this version does not sum to study population*/
-	dis `r(sum)'
+		/**************************************************/
+		/*itpw weights - unstabilized*/
+		/**************************************************/
 
-	/*in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights*/
-	/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
-	/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
-	/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
-	replace iptw=iptw*wts_m
+			/*use 1/1-pr for control group, which the same as using the reverse scored outcome to generate pr followed by 1/pr*/
+			/*note, this formula same, but in one line: generate iptw=(jobcontrol_binary/pscore) + ((1-jobcontrol_binary)/(1-pscore))*/
+			capture drop iptw
+			generate iptw=1/pscore if jobcontrol_binary==1
+			replace iptw=1/(1-pscore) if jobcontrol_binary==0
+			sum iptw, d
+			/*check total weighted population - this version does not sum to study population*/
+			dis `r(sum)'
 
-	/*apply weights for use in survey regression commands (to create IPTW weighted population)*/
-	svyset [pweight=iptw]
+			/*in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights*/
+			/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
+			/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
+			/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
+			replace iptw=iptw*wts_m
+
+			/*apply weights for use in survey regression commands (to create IPTW weighted population)*/
+			svyset [pweight=iptw]
 
 		/**************************************************/
 		/*itpw weights - stabilized version*/
 		/**************************************************/
 
 			/*this calculates the baseline prevalence of the treatment variable*/
-			logistic jobcontrol_high
+			logistic jobcontrol_binary
 			predict pscore_baseline, pr
 			sum pscore_baseline, d
-			tab jobcontrol_high
+			tab jobcontrol_binary
 
 			/*multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)*/
 			/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
 			capture drop iptw_stab
-			generate iptw_stab=pscore_baseline/pscore if jobcontrol_high==1
-			replace iptw_stab=(1-pscore_baseline)/(1-pscore) if jobcontrol_high==0
+			generate iptw_stab=pscore_baseline/pscore if jobcontrol_binary==1
+			replace iptw_stab=(1-pscore_baseline)/(1-pscore) if jobcontrol_binary==0
 			sum iptw_stab, d
 			/*check total weighted population - this version sums to study population*/
 			dis `r(sum)'
@@ -260,30 +265,30 @@ tab jobcontrol jobcontrol_q4
 
 	/*unweighted*/
 
-	tabstat wstdpsy wstdsoc wstdphy wstdjin, statistics(mean sd) by(jobcontrol_high)
-		qqplot3 wstdpsy, by(jobcontrol_high)
-		graph box wstdpsy, over(jobcontrol_high)
-		graph box wstdsoc, over(jobcontrol_high)
-		graph box wstdphy, over(jobcontrol_high)
-		graph box wstdjin, over(jobcontrol_high)
-	tab geo_prv jobcontrol_high, col nofreq chi2
-	tab dhh_sex jobcontrol_high, col nofreq chi2
-	tab dhhgms jobcontrol_high, col nofreq chi2
-	tab dhhghsz jobcontrol_high, col nofreq chi2
-	tab dhhgdwe jobcontrol_high, col nofreq chi2
+	tabstat wstdpsy wstdsoc wstdphy wstdjin, statistics(mean sd) by(jobcontrol_binary)
+		qqplot3 wstdpsy, by(jobcontrol_binary)
+		graph box wstdpsy, over(jobcontrol_binary)
+		graph box wstdsoc, over(jobcontrol_binary)
+		graph box wstdphy, over(jobcontrol_binary)
+		graph box wstdjin, over(jobcontrol_binary)
+	tab geo_prv jobcontrol_binary, col nofreq chi2
+	tab dhh_sex jobcontrol_binary, col nofreq chi2
+	tab dhhgms jobcontrol_binary, col nofreq chi2
+	tab dhhghsz jobcontrol_binary, col nofreq chi2
+	tab dhhgdwe jobcontrol_binary, col nofreq chi2
 
 	/*standardized differences, which allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn*/
-	*stddiff wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex dhhgms dhhghsz dhhgdwe, by(jobcontrol_high)
+	*stddiff wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex dhhgms dhhghsz dhhgdwe, by(jobcontrol_binary)
 
 		/*unmatched*/
 
 			stddiffi 3.733827 2.127126 3.140643 2.058106
 
-			quietly sum wstdsoc if jobcontrol_high==0
+			quietly sum wstdsoc if jobcontrol_binary==0
 			local mean0=r(mean)
 			local sd0=r(sd)
 
-			quietly sum wstdsoc if jobcontrol_high==1
+			quietly sum wstdsoc if jobcontrol_binary==1
 			local mean1=r(mean)
 			local sd1=r(sd)
 
@@ -291,31 +296,31 @@ tab jobcontrol jobcontrol_q4
 
 		/*within strata of pscore*/
 
-			quietly sum wstdsoc if jobcontrol_high==0 & pscore_q5==1
+			quietly sum wstdsoc if jobcontrol_binary==0 & pscore_q5==1
 			local mean0=r(mean)
 			local sd0=r(sd)
 
-			quietly sum wstdsoc if jobcontrol_high==1 & pscore_q5==1
+			quietly sum wstdsoc if jobcontrol_binary==1 & pscore_q5==1
 			local mean1=r(mean)
 			local sd1=r(sd)
 
 				dis (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
 
-			quietly sum wstdsoc if jobcontrol_high==0 & pscore_q5==3
+			quietly sum wstdsoc if jobcontrol_binary==0 & pscore_q5==3
 			local mean0=r(mean)
 			local sd0=r(sd)
 
-			quietly sum wstdsoc if jobcontrol_high==1 & pscore_q5==3
+			quietly sum wstdsoc if jobcontrol_binary==1 & pscore_q5==3
 			local mean1=r(mean)
 			local sd1=r(sd)
 
 				dis (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
 
-			quietly sum wstdsoc if jobcontrol_high==0 & pscore_q5==5
+			quietly sum wstdsoc if jobcontrol_binary==0 & pscore_q5==5
 			local mean0=r(mean)
 			local sd0=r(sd)
 
-			quietly sum wstdsoc if jobcontrol_high==1 & pscore_q5==5
+			quietly sum wstdsoc if jobcontrol_binary==1 & pscore_q5==5
 			local mean1=r(mean)
 			local sd1=r(sd)
 
@@ -325,11 +330,11 @@ tab jobcontrol jobcontrol_q4
 
 			stddiffi 3.530568 2.279335 3.483204 2.080622
 
-			quietly sum wstdsoc [aweight=iptw] if jobcontrol_high==0
+			quietly sum wstdsoc [aweight=iptw] if jobcontrol_binary==0
 			local mean0=r(mean)
 			local sd0=r(sd)
 
-			quietly sum wstdsoc [aweight=iptw] if jobcontrol_high==1
+			quietly sum wstdsoc [aweight=iptw] if jobcontrol_binary==1
 			local mean1=r(mean)
 			local sd1=r(sd)
 
@@ -337,102 +342,102 @@ tab jobcontrol jobcontrol_q4
 
 	/*balance within blocks - similar to matching*/
 
-		tabstat wstdpsy wstdsoc wstdphy wstdjin if pscore_q5==1, statistics(mean) by(jobcontrol_high)
-		tab geo_prv jobcontrol_high if pscore_q5==1, col nofreq chi2
-		tab dhh_sex jobcontrol_high if pscore_q5==1, col nofreq chi2
-		tab dhhgms jobcontrol_high if pscore_q5==1, col nofreq chi2
-		tab dhhghsz jobcontrol_high if pscore_q5==1, col nofreq chi2
-		tab dhhgdwe jobcontrol_high if pscore_q5==1, col nofreq chi2
+		tabstat wstdpsy wstdsoc wstdphy wstdjin if pscore_q5==1, statistics(mean) by(jobcontrol_binary)
+		tab geo_prv jobcontrol_binary if pscore_q5==1, col nofreq chi2
+		tab dhh_sex jobcontrol_binary if pscore_q5==1, col nofreq chi2
+		tab dhhgms jobcontrol_binary if pscore_q5==1, col nofreq chi2
+		tab dhhghsz jobcontrol_binary if pscore_q5==1, col nofreq chi2
+		tab dhhgdwe jobcontrol_binary if pscore_q5==1, col nofreq chi2
 
-		tabstat wstdpsy wstdsoc wstdphy wstdjin if pscore_q5==5, statistics(mean) by(jobcontrol_high)
-		tab geo_prv jobcontrol_high if pscore_q5==5, col nofreq chi2
-		tab dhh_sex jobcontrol_high if pscore_q5==5, col nofreq chi2
-		tab dhhgms jobcontrol_high if pscore_q5==5, col nofreq chi2
-		tab dhhghsz jobcontrol_high if pscore_q5==5, col nofreq chi2
-		tab dhhgdwe jobcontrol_high if pscore_q5==5, col nofreq chi2
+		tabstat wstdpsy wstdsoc wstdphy wstdjin if pscore_q5==5, statistics(mean) by(jobcontrol_binary)
+		tab geo_prv jobcontrol_binary if pscore_q5==5, col nofreq chi2
+		tab dhh_sex jobcontrol_binary if pscore_q5==5, col nofreq chi2
+		tab dhhgms jobcontrol_binary if pscore_q5==5, col nofreq chi2
+		tab dhhghsz jobcontrol_binary if pscore_q5==5, col nofreq chi2
+		tab dhhgdwe jobcontrol_binary if pscore_q5==5, col nofreq chi2
 
 	/*itpw weighted*/
-	tabstat wstdpsy wstdsoc wstdphy wstdjin [aweight=iptw], statistics(mean sd) by(jobcontrol_high)
-		qqplot3 wstdpsy [pw=iptw], by(jobcontrol_high)
-		graph box wstdpsy [aweight=iptw], over(jobcontrol_high)
-		graph box wstdsoc [aweight=iptw], over(jobcontrol_high)
-		graph box wstdphy [aweight=iptw], over(jobcontrol_high)
-		graph box wstdjin [aweight=iptw], over(jobcontrol_high)
-	svy: tab geo_prv jobcontrol_high, col
-	svy: tab dhh_sex jobcontrol_high, col
-	svy: tab dhhgms jobcontrol_high, col
-	svy: tab dhhghsz jobcontrol_high, col
-	svy: tab dhhgdwe jobcontrol_high, col
+	tabstat wstdpsy wstdsoc wstdphy wstdjin [aweight=iptw], statistics(mean sd) by(jobcontrol_binary)
+		qqplot3 wstdpsy [pw=iptw], by(jobcontrol_binary)
+		graph box wstdpsy [aweight=iptw], over(jobcontrol_binary)
+		graph box wstdsoc [aweight=iptw], over(jobcontrol_binary)
+		graph box wstdphy [aweight=iptw], over(jobcontrol_binary)
+		graph box wstdjin [aweight=iptw], over(jobcontrol_binary)
+	svy: tab geo_prv jobcontrol_binary, col
+	svy: tab dhh_sex jobcontrol_binary, col
+	svy: tab dhhgms jobcontrol_binary, col
+	svy: tab dhhghsz jobcontrol_binary, col
+	svy: tab dhhgdwe jobcontrol_binary, col
 
 /**************************************************/
 /*models*/
 /**************************************************/
 
 	/*unadjusted*/
-	logistic dep_yn jobcontrol_high
+	logistic dep_yn jobcontrol_binary
 
 	/*regression adjusted with no pscore*/
-	logistic dep_yn jobcontrol_high wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
+	logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
 
 	/*direct pscore adjustment*/
-	logistic dep_yn jobcontrol_high pscore
+	logistic dep_yn jobcontrol_binary pscore
 
 	/*direct pscore adjustment using strata*/
-	logistic dep_yn jobcontrol_high i.pscore_q5
+	logistic dep_yn jobcontrol_binary i.pscore_q5
 
 	/*cem - matching on covariates with no pscore*/
 	/*note: should coarsen manually for nominal variables like geo_prv*/
 
 		/*run matching algorithm*/
-		cem wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex (#0) dhhgms (#0) dhhghsz dhhgdwe (#0) if jobcontrol_high!=., treatment(jobcontrol_high)
+		cem wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex (#0) dhhgms (#0) dhhghsz dhhgdwe (#0) if jobcontrol_binary!=., treatment(jobcontrol_binary)
 		tab cem_weights
-		logistic dep_yn jobcontrol_high [iweight=cem_weights]
+		logistic dep_yn jobcontrol_binary [iweight=cem_weights]
 
 			/*double robust with covariates used for matching*/
-			logistic dep_yn jobcontrol_high wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe [iweight=cem_weights]
+			logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe [iweight=cem_weights]
 
 		/*cem with pscore matching*/
-		cem pscore if jobcontrol_high!=., treatment(jobcontrol_high)
+		cem pscore if jobcontrol_binary!=., treatment(jobcontrol_binary)
 		tab cem_weights
-		tab jobcontrol_high cem_matched, missing
+		tab jobcontrol_binary cem_matched, missing
 		scatter pscore cem_strata
-		logistic dep_yn jobcontrol_high i.cem_strata
-		logistic dep_yn jobcontrol_high [iweight=cem_weights]
+		logistic dep_yn jobcontrol_binary i.cem_strata
+		logistic dep_yn jobcontrol_binary [iweight=cem_weights]
 
 			/*double robust with covariates used for matching*/
-			logistic dep_yn jobcontrol_high wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe [iweight=cem_weights]
+			logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe [iweight=cem_weights]
 
 	/*double robust pscore with covariates used for pscore model*/
-	logistic dep_yn jobcontrol_high pscore wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
+	logistic dep_yn jobcontrol_binary pscore wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
 
 	/*iptw adjustment*/
 	/*use robust estimator to account for the fact that the weights are estimated using estimated pscore; could also use bootstrap methods*/
-	logistic dep_yn jobcontrol_high [pweight=iptw], robust
-	logistic dep_yn jobcontrol_high [pweight=iptw_stab], robust
-	logistic dep_yn jobcontrol_high [pweight=iptw_trimmed], robust
+	logistic dep_yn jobcontrol_binary [pweight=iptw], robust
+	logistic dep_yn jobcontrol_binary [pweight=iptw_stab], robust
+	logistic dep_yn jobcontrol_binary [pweight=iptw_trimmed], robust
 
 		/*treatment effects on the probability scale (linear probability model)*/
 		/*compare with linear probability model from teffects*/
-		svy: logistic dep_yn jobcontrol_high, nolog
-		margins, by(jobcontrol_high)
-		margins, over(jobcontrol_high)
-		margins, dydx(jobcontrol_high)
+		svy: logistic dep_yn jobcontrol_binary, nolog
+		margins, by(jobcontrol_binary)
+		margins, over(jobcontrol_binary)
+		margins, dydx(jobcontrol_binary)
 		dis .0579262-.0444154
 
 		/*iptw using teffects - note, same as margins based on logit model, or linear probability model*/
-		regress dep_yn jobcontrol_high [pweight=iptw], robust
-		teffects ipw (dep_yn) (jobcontrol_high wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, logit), aequations
+		regress dep_yn jobcontrol_binary [pweight=iptw], robust
+		teffects ipw (dep_yn) (jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, logit), aequations
 
 	/*same as above, using means, demonstrating model independence*/
-	regress dep_yn jobcontrol_high [pweight=iptw], robust
-	svy: mean dep_yn, over(jobcontrol_high)
+	regress dep_yn jobcontrol_binary [pweight=iptw], robust
+	svy: mean dep_yn, over(jobcontrol_binary)
 	lincom _b[1]-_b[0]
-	tabstat dep_yn [aweight=iptw], statistics(mean sd) by(jobcontrol_high)
+	tabstat dep_yn [aweight=iptw], statistics(mean sd) by(jobcontrol_binary)
 	dis .0541224-.038796
 
 	/*iptw using mmws command - see help files for examples*/
 
-		mmws jobcontrol_high, pscore(pscore) iptw figure replace /*common*/
+		mmws jobcontrol_binary, pscore(pscore) iptw figure replace /*common*/
 			dis `r(suppmin1)'
 			dis `r(suppmax1)'
 
@@ -451,15 +456,50 @@ tab jobcontrol jobcontrol_q4
 		capture noisily assert iptw==_iptw
 
 		/*weights are the same as iptw manual*/
-		logistic dep_yn i.jobcontrol_high [pweight=_mmws]
-		logistic dep_yn i.jobcontrol_high [pweight=_iptw]
-		margins jobcontrol_high
+		logistic dep_yn i.jobcontrol_binary [pweight=_mmws]
+		logistic dep_yn i.jobcontrol_binary [pweight=_iptw]
+		margins jobcontrol_binary
 		dis .0541224-.038796
 		marginsplot, plotopts(connect(i))
-		margins jobcontrol_high, pwcompare(effects) mcompare(bonferroni)
+		margins jobcontrol_binary, pwcompare(effects) mcompare(bonferroni)
 
 	/*double robust iptw with covariates used for pscore model*/
-	svy: logistic dep_yn jobcontrol_high wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, nolog
+	svy: logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, nolog
+
+	/*matching*/
+	cem pscore, treatment(jobcontrol_binary)
+	tab cem_matched jobcontrol_binary, missing
+	logistic dep_yn jobcontrol_binary if cem_matched==1
+
+	/*
+	/*in region of common support*/
+	sum pscore if jobcontrol_binary==0
+	local min_control=r(min)
+	local max_control=r(max)
+	sum pscore if jobcontrol_binary==1
+	local min_treated=r(min)
+	local max_treated=r(max)
+	local min_region=max(`min_control',`min_treated')
+	local max_region=min(`max_control',`max_treated')
+	dis `min_region'
+	dis `max_region'
+	tab jobcontrol_binary if pscore<`min_region'
+	tab jobcontrol_binary if pscore>`max_region' & pscore!=.
+	tab jobcontrol_binary if pscore>=`min_region' & pscore<=`max_region'
+
+	/*use psmatch2 for matching but supply pscore*/
+	tabstat pscore if _support==0, by(jobcontrol_binary) statistics(n min max)
+	tabstat pscore if _support==1, by(jobcontrol_binary) statistics(n min max)
+	tabstat pscore if _support==., by(jobcontrol_binary) statistics(n min max)
+
+	/*psmatch2 gives the same pscore, but also handles matching and the outcome model*/
+	psmatch2 jobcontrol_binary, logit outcome(dep_yn) pscore(pscore) ate common
+	psmatch2 jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, logit outcome(dep_yn) ate
+	psmatch2 jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, logit outcome(dep_yn) ate neighbor(1)
+	dis `r(att)'
+	dis `r(ate)'
+	corr pscore _pscore
+	*/
 
 /****************************************************************************************************/
 /****************************************************************************************************/
@@ -476,9 +516,9 @@ tab jobcontrol jobcontrol_q4
 	/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
 	/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
 	/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
+	mlogit jobcontrol_q4 wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, baseoutcome(1) rrr
 	svyset [pweight=wts_m]
-	tab jobcontrol_q4
-	svy: mlogit jobcontrol_q4 wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, baseoutcome(1)
+	svy: mlogit jobcontrol_q4 wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, baseoutcome(1) rrr
 	capture drop pscore_1
 	predict pscore_1, pr equation(1)
 	sum pscore_1, d
@@ -536,25 +576,29 @@ tab jobcontrol jobcontrol_q4
 /*next, generate itpw weights using the propensity score*/
 /**************************************************/
 
-	/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
-	/*note, this formula same as above, but in one line: generate iptw=(jobcontrol_high/pscore) + ((1-jobcontrol_high)/(1-pscore))*/
-	capture drop iptw_q4
-	generate iptw_q4=1/pscore_1 if jobcontrol_q4==1
-	replace iptw_q4=1/pscore_2 if jobcontrol_q4==2
-	replace iptw_q4=1/pscore_3 if jobcontrol_q4==3
-	replace iptw_q4=1/pscore_4 if jobcontrol_q4==4
-	sum iptw_q4, d
-	/*check total weighted population - this version does not sum to study population*/
-	dis `r(sum)'	
+		/**************************************************/
+		/*itpw weights - unstabilized*/
+		/**************************************************/
 
-	/*in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights*/
-	/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
-	/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
-	/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
-	replace iptw_q4=iptw_q4*wts_m
+			/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
+			/*note, this formula same as above, but in one line: generate iptw=(jobcontrol_binary/pscore) + ((1-jobcontrol_binary)/(1-pscore))*/
+			capture drop iptw_q4
+			generate iptw_q4=1/pscore_1 if jobcontrol_q4==1
+			replace iptw_q4=1/pscore_2 if jobcontrol_q4==2
+			replace iptw_q4=1/pscore_3 if jobcontrol_q4==3
+			replace iptw_q4=1/pscore_4 if jobcontrol_q4==4
+			sum iptw_q4, d
+			/*check total weighted population - this version does not sum to study population*/
+			dis `r(sum)'	
 
-	/*apply weights for use in survey regression commands (to create IPTW weighted population)*/
-	svyset [pweight=iptw_q4]
+			/*in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights*/
+			/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
+			/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
+			/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
+			replace iptw_q4=iptw_q4*wts_m
+
+			/*apply weights for use in survey regression commands (to create IPTW weighted population)*/
+			svyset [pweight=iptw_q4]
 
 		/**************************************************/
 		/*itpw weights - stabilized*/
