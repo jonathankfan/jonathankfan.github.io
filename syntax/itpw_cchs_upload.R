@@ -54,11 +54,17 @@ library(epiDisplay) #lroc
 #install.packages("survey")
 library(survey) #surveyglm
 
+#install.packages("srvyr")
+library(srvyr) #allow survey weights with dplyr summarize
+
+#install.packages("tableone")
+library(tableone) #to create tables with standardized mean difference
+
 ##################################################
 #LOAD CCHS 2012 MENTAL HEALTH SURVEY#
 ##################################################
 
-data1 <- read_dta("C:/Users/Jonathan/Desktop/IPTW/dataverse_files/Data/cchs2012_mh_old.dta") 
+data1 <- read_dta("[FILEPATH]/cchs2012_mh_old.dta") 
 str(data1)
 glimpse(data1)
 count(data1)
@@ -85,11 +91,11 @@ data3<-data2%>%
   mutate(jobcontrol_binary=if_else(jobcontrol>=8 & !is.na(jobcontrol),1,if_else(jobcontrol<8 & !is.na(jobcontrol),0,NA_real_))) %>%
   mutate(jobcontrol_q4=if_else(jobcontrol>=9 & !is.na(jobcontrol),4,if_else(jobcontrol>=7 & jobcontrol<9,3,if_else(jobcontrol>=5 & jobcontrol<7,2,if_else(jobcontrol>=0 & jobcontrol<5,1,NA_real_)))))
 data3%>%count(dep_yn,depddy)
-data3%>%group_by(jobcontrol_q4)%>%summarise(min(jobcontrol,na.rm=TRUE),max(jobcontrol,na.rm=TRUE))
+data3%>%group_by(jobcontrol_q4)%>%summarize(min(jobcontrol,na.rm=TRUE),max(jobcontrol,na.rm=TRUE))
 
 ####################################################################################################
 ####################################################################################################
-#BINARY TREATMENT - EXCLUDE SURVEY WEIGHTS FOR PROPENSITY SCORE MODELS BELOW#
+#BINARY TREATMENT#
 ####################################################################################################
 ####################################################################################################
 
@@ -111,7 +117,7 @@ logit_treatment_base<-glm(jobcontrol_binary ~ 1, data=data3, na.action=na.exclud
   summary(logit_treatment_base)
   exp(cbind(OR = coef(logit_treatment_base), confint(logit_treatment_base)))
 
-#predict pscore and merge to data 
+#predict pscore based on above models, and merge back to data 
 data4<-data3
 data4$pscore<-predict(logit_treatment,newdata=data3,type="response")
 data4$pscore_base<-predict(logit_treatment_base,newdata=data3,type="response")
@@ -127,11 +133,16 @@ data4%>%filter(!is.na(jobcontrol_binary))%>%
   geom_histogram(color = "white") + 
   facet_wrap(~jobcontrol_binary)
 
-#also want to check the mean pscore or distribution of pscore by treatment, within strata of pscore
+#check the mean pscore or distribution of pscore by treatment, within strata of pscore
+  
+  #pscore 0.2 to 0.29
+  data4%>%filter(pscore>=.2 & pscore<.3)%>%group_by(jobcontrol_binary)%>%summarize(mean(pscore,na.rm=TRUE))
 
-#also want to assess balance of covariates across treatment groups using standardized differences or boxplots
-#standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
-#check balance in the unmatched sample, within strata of pscore, and within the IPTW weighted sample
+  #pscore 0.4 to 0.49
+  data4%>%filter(pscore>=.4 & pscore<.5)%>%group_by(jobcontrol_binary)%>%summarize(mean(pscore,na.rm=TRUE))
+
+  #pscore 0.7 to 0.79
+  data4%>%filter(pscore>=.7 & pscore<.8)%>%group_by(jobcontrol_binary)%>%summarize(mean(pscore,na.rm=TRUE))
 
 ##################################################
 #IPTW#
@@ -151,8 +162,36 @@ data5%>%summarize(iptw_sum=sum(iptw,na.rm = TRUE))
 #check stabilized weights sum to study population
 data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
 
-#can trim weights at the 1/99 percentiles
+#can trim weights at the 1/99 percentiles to stabilize
 
+##################################################
+#ASSESS BALANCE#
+##################################################
+
+#assess balance of covariates across treatment groups using standardized differences or boxplots
+#check balance in the unmatched sample, within strata of pscore, and within the IPTW weighted sample
+
+  #unweighted
+  unweighted_mean<-data5%>%group_by(jobcontrol_binary)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),mean,na.rm=TRUE)
+  view(unweighted_mean)
+  unweighted_sd<-data5%>%group_by(jobcontrol_binary)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
+  view(unweighted_sd)
+
+  #weighted
+  weighted_mean<-data5%>%filter(!is.na(iptw))%>%as_survey(weights=iptw)%>%group_by(jobcontrol_binary)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
+  view(weighted_mean)
+  
+#standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
+
+  #unweighted
+  unweighted<-CreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_binary",data=data5,test=FALSE)
+  print(unweighted,smd=TRUE)
+  
+  #weighted - this doesn't work - need to fix - but can manually calculate weighted SMD using weighted mean and weighted SD using the formula: sdm = (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
+  #data6<-data5%>%filter(!is.na(iptw))
+  #svydesign<-svydesign(id=~adm_rno, weights=~iptw, data=data6)
+  #weighted<-svyCreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_binary",data=svydesign,test=FALSE)
+  
 ##################################################
 #OUTCOME MODELS#
 ##################################################
@@ -194,7 +233,7 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary + wstdpsy + wstdsoc + wstdphy +
 
 ####################################################################################################
 ####################################################################################################
-#NOMINAL TREATMENT#
+#CATEGORICAL TREATMENT#
 ####################################################################################################
 ####################################################################################################
 
@@ -214,6 +253,7 @@ mlogit_treatment<-multinom(jobcontrol_q4 ~ wstdpsy + wstdsoc + wstdphy + wstdjin
 
 #pscore model - base, for stabilized weights that sum to study sample
 #this calculates the baseline prevalence of the treatment variable
+#specify base outcome; first, convert outcome to factor variable
 data3_mlogit<-data3%>%mutate(jobcontrol_q4=as.factor(jobcontrol_q4))
 data3_mlogit$jobcontrol_q4<-relevel(data3_mlogit$jobcontrol_q4,ref=1)
 mlogit_treatment_base<-multinom(jobcontrol_q4 ~ 1, data=data3_mlogit, na.action=na.exclude)
@@ -222,7 +262,7 @@ mlogit_treatment_base<-multinom(jobcontrol_q4 ~ 1, data=data3_mlogit, na.action=
   exp(coef(mlogit_treatment_base))
   exp(confint(mlogit_treatment_base))
 
-#predict pscore and merge to data; note, all outcome probabilities across levels add to "1"
+#predict pscore based on above models, and merge back to data; note, all outcome probabilities across levels add to "1"
 data4<-cbind(data3,fitted(mlogit_treatment,newdata=data3))%>%
   rename(pscore_1=`1`,pscore_2=`2`,pscore_3=`3`,pscore_4=`4`)
 data5<-cbind(data4,fitted(mlogit_treatment_base,newdata=data3))%>%
@@ -255,12 +295,26 @@ data5<-cbind(data4,fitted(mlogit_treatment_base,newdata=data3))%>%
     geom_histogram(color = "white") + 
     facet_wrap(~jobcontrol_q4)
 
-#also want to check the mean pscore or distribution of pscore by treatment, within strata of pscore
-
-#also want to assess balance of covariates across treatment groups using standardized differences or boxplots
-#standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
-#check balance in the unmatched sample, within strata of pscore, and within the IPTW weighted sample
-
+#check the mean pscore or distribution of pscore by treatment, within strata of pscore
+    
+  #pscore 0.2 to 0.29
+  data5%>%filter(pscore_1>=.2 & pscore_1<.3)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_1,na.rm=TRUE))
+  data5%>%filter(pscore_2>=.2 & pscore_2<.3)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_2,na.rm=TRUE))
+  data5%>%filter(pscore_3>=.2 & pscore_3<.3)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_3,na.rm=TRUE))
+  data5%>%filter(pscore_4>=.2 & pscore_4<.3)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_4,na.rm=TRUE))
+  
+  #pscore 0.4 to 0.49
+  data5%>%filter(pscore_1>=.4 & pscore_1<.5)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_1,na.rm=TRUE))
+  data5%>%filter(pscore_2>=.4 & pscore_2<.5)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_2,na.rm=TRUE))
+  data5%>%filter(pscore_3>=.4 & pscore_3<.5)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_3,na.rm=TRUE))
+  data5%>%filter(pscore_4>=.4 & pscore_4<.5)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_4,na.rm=TRUE))
+  
+  #pscore 0.7 to 0.79
+  data5%>%filter(pscore_1>=.7 & pscore_1<.8)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_1,na.rm=TRUE))
+  data5%>%filter(pscore_2>=.7 & pscore_2<.8)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_2,na.rm=TRUE))
+  data5%>%filter(pscore_3>=.7 & pscore_3<.8)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_3,na.rm=TRUE))
+  data5%>%filter(pscore_4>=.7 & pscore_4<.8)%>%group_by(jobcontrol_q4)%>%summarize(mean(pscore_4,na.rm=TRUE))
+  
 ##################################################
 #IPTW#
 ##################################################
@@ -287,7 +341,35 @@ data6%>%summarize(iptw_q4_sum=sum(iptw_q4,na.rm = TRUE))
 #check stabilized weights sum to study population
 data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 
-#can trim weights at the 1/99 percentiles
+#can trim weights at the 1/99 percentiles to stabilize
+
+##################################################
+#ASSESS BALANCE#
+##################################################
+
+#assess balance of covariates across treatment groups using standardized differences or boxplots
+#check balance in the unmatched sample, within strata of pscore, and within the IPTW weighted sample
+
+  #unweighted
+  unweighted_mean<-data6%>%group_by(jobcontrol_q4)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),mean,na.rm=TRUE)
+  view(unweighted_mean)
+  unweighted_sd<-data6%>%group_by(jobcontrol_q4)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
+  view(unweighted_sd)
+  
+  #weighted
+  weighted_mean<-data6%>%filter(!is.na(iptw_q4))%>%as_survey(weights=iptw_q4)%>%group_by(jobcontrol_q4)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
+  view(weighted_mean)
+
+#standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
+
+  #unweighted
+  unweighted<-CreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_q4",data=data6,test=FALSE)
+  print(unweighted,smd=TRUE)
+  
+  #weighted - this doesn't work - need to fix - but can manually calculate weighted SMD using weighted mean and weighted SD using the formula: sdm = (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
+  #data6<-data5%>%filter(!is.na(iptw_q4))
+  #svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data6)
+  #weighted<-svyCreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_q4",data=svydesign,test=FALSE)
 
 ##################################################
 #OUTCOME MODELS#
