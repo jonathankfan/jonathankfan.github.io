@@ -1,6 +1,31 @@
 
 ####################################################################################################
 ####################################################################################################
+#ABOUT#
+#This syntax provides supplementary analysis (with some modifications) for a published paper examining the relationship between psychosocial work conditions and mental health outcomes among workers, using data from the CCHS 2012 Mental Health survey.
+#The analysis below uses files from the Public Use Microdata Files. The orgiinal syntax files and raw data are located at the Statistics Canada Research Data Centre (Toronto), given privacy considerations.
+#The paper was published by Fan et al. (2019) in the Annals of Work Exposures and Health (2019;63(5):546-559).
+#See here for published paper: https://raw.githubusercontent.com/jonathankfan/jonathankfan.github.io/main/publications/Fan.2019.ANNWEH.pdf
+####################################################################################################
+####################################################################################################
+
+####################################################################################################
+####################################################################################################
+#DOWNLOAD DATA#
+#CCHS 2012: Mental Health Component
+#http://sda.chass.utoronto.ca/cgi-bin/sda/hsda?harcsda3+cchs2012mh
+#Download -> Customized Subset (allow popups)
+#Choose "CSV file"
+#Check "Data definitions for Stata"
+#Select ALL variables (file is small, 32 MB)
+#Click "Continue"
+#Click "Create the files"
+#It should say "587 variables for 25113 cases in subset"
+####################################################################################################
+####################################################################################################
+
+####################################################################################################
+####################################################################################################
 #LOAD PACKAGES#
 ####################################################################################################
 ####################################################################################################
@@ -45,12 +70,15 @@ count(data1)
 ####################################################################################################
 
 #filters
+#WORKED IN PAST 12 MONTHS
+#EMPLOYEES ONLY (EXCLUDING SELF-EMPLOYED)
 data2<-data1%>%
   rename_all(tolower)%>%
   filter(gen_08==1 & lbsg31==1)
 count(data2)
 
-#exposure variables
+#outcome variable: depression in past 12 months: yes/no
+#exposure variable: job control (combination of skill discretion and decision authority): continuous, binary, categorical
 data3<-data2%>%
   mutate(dep_yn=if_else(depddy==2,0,if_else(depddy==1,1,NA_real_))) %>%
   mutate(jobcontrol=wstdski+wstdaut) %>%
@@ -61,39 +89,12 @@ data3%>%group_by(jobcontrol_q4)%>%summarise(min(jobcontrol,na.rm=TRUE),max(jobco
 
 ####################################################################################################
 ####################################################################################################
-#FOR ILLUSTRATION - BINARY TREATMENT - SURVEY WEIGHTED#
-####################################################################################################
-####################################################################################################
-
-#pscore model with survey weights
-#normally, na.action=na.exclude will pad rows with missing data with NA to allow merging, but does not work with svyglm for some reason; to merge, must restrict sample first and then merge on index
-#must use quasibinomial for svyglm
-data3_subcohort<-data3%>%dplyr::select(jobcontrol_binary,wstdpsy,wstdsoc,wstdphy,wstdjin,geo_prv,dhh_sex,dhhgms,dhhghsz,dhhgdwe)%>%
-  na.omit()
-count(data3_subcohort)
-svydesign<-svydesign(id=~adm_rno, weights=~wts_m, data=data3_subcohort)
-svylogit<-svyglm(jobcontrol_binary ~ wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data3_subcohort, family="quasibinomial", design=svydesign)
-
-  summary(svylogit)
-  exp(cbind(OR = coef(svylogit), confint(svylogit)))
-  lroc(svylogit)
-
-#predict pscore and merge to full cohort
-data3_subcohort_pscore<-data3_subcohort
-data3_subcohort_pscore$pscore<-predict(svylogit,newdata=data3_subcohort,type="response")
-data3_subcohort_pscore<-data3_subcohort%>%dplyr::select(adm_rno,pscore)
-data4<-data3%>%left_join(data3_subcohort_pscore,by="adm_rno")
-rm(data3_subcohort,data3_subcohort_pscore)
-gc()
-
-####################################################################################################
-####################################################################################################
-#BINARY TREATMENT#
+#BINARY TREATMENT - EXCLUDE SURVEY WEIGHTS FOR PROPENSITY SCORE MODELS BELOW#
 ####################################################################################################
 ####################################################################################################
 
 ##################################################
-#PSCORE MODELS - EXCLUDE SURVEY WEIGHTS FOR PROPENSITY SCORE MODELS BELOW#
+#PSCORE MODELS#
 ##################################################
 
 #pscore model
@@ -104,6 +105,7 @@ logit_treatment<-glm(jobcontrol_binary ~ wstdpsy + wstdsoc + wstdphy + wstdjin +
   lroc(logit_treatment)
 
 #pscore model - base, for stabilized weights that sum to study sample
+#this calculates the baseline prevalence of the treatment variable
 logit_treatment_base<-glm(jobcontrol_binary ~ 1, data=data3, na.action=na.exclude, family="binomial")
   
   summary(logit_treatment_base)
@@ -118,17 +120,26 @@ data4$pscore_base<-predict(logit_treatment_base,newdata=data3,type="response")
 #DIAGNOSTICS#
 ##################################################
 
-#check region of common support
+#check region of common support, i.e., positivity assumption
+#if there are regions outside of common support, then we could use pscore matching with calipers or restrict IPTW analysis to region of common support (or to pscores within 0.1 to 0.9), to reduce bias (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5564952)
 data4%>%filter(!is.na(jobcontrol_binary))%>%
   ggplot(aes(x = pscore, fill=jobcontrol_binary)) +
   geom_histogram(color = "white") + 
   facet_wrap(~jobcontrol_binary)
+
+#also want to check the mean pscore or distribution of pscore by treatment, within strata of pscore
+
+#also want to assess balance of covariates across treatment groups using standardized differences or boxplots
+#standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
+#check balance in the unmatched sample, within strata of pscore, and within the IPTW weighted sample
 
 ##################################################
 #IPTW#
 ##################################################
 
 #generate IPTW - unstabilized and stabilized versions
+#for stabilized weights, multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)
+#use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr
 data5<-data4%>%
   mutate(iptw=if_else(jobcontrol_binary==1,1/pscore,if_else(jobcontrol_binary==0,1/(1-pscore),NA_real_)))%>%
   mutate(iptw_stab=if_else(jobcontrol_binary==1,pscore_base/pscore,if_else(jobcontrol_binary==0,(1-pscore_base)/(1-pscore),NA_real_)))
@@ -136,7 +147,7 @@ data5<-data4%>%
 #check weights do not sum to study population (approximately twice the size)
 data5%>%summarize(iptw_sum=sum(iptw,na.rm = TRUE))
 
-#check stabilized weights sum to sudy population
+#check stabilized weights sum to study population
 data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
 
 #can trim weights at the 1/99 percentiles
@@ -145,7 +156,7 @@ data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
 #OUTCOME MODELS#
 ##################################################
 
-#outcome model with IPTW weights
+#outcome model (marginal structural model) with IPTW weights
 data6<-data5%>%filter(!is.na(iptw))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw, data=data6)
 logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinomial", design=svydesign)
@@ -156,7 +167,7 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinom
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
   lroc(logit_outcome)
 
-#outcome model with IPTW weights stabilized
+#outcome model (marginal structural model) with IPTW weights stabilized
 data6<-data5%>%filter(!is.na(iptw_stab))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw_stab, data=data6)
 logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinomial", design=svydesign)
@@ -167,7 +178,7 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinom
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
   lroc(logit_outcome)
 
-#outcome model with IPTW weights - double robust with covariates used for pscore model 
+#outcome model (marginal structural model) with IPTW weights - double robust with covariates used for pscore model 
 data6<-data5%>%filter(!is.na(iptw))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw, data=data6)
 logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary + wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data6, family="quasibinomial", design=svydesign)
@@ -178,7 +189,7 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary + wstdpsy + wstdsoc + wstdphy +
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
   lroc(logit_outcome)
 
-#can run regression models, direct adjustment with pscore, stratification by pscore, matching on pscore
+#can also run regression models, direct adjustment with pscore, stratification by pscore, matching on pscore
 
 ####################################################################################################
 ####################################################################################################
@@ -201,6 +212,7 @@ mlogit_treatment<-multinom(jobcontrol_q4 ~ wstdpsy + wstdsoc + wstdphy + wstdjin
   exp(confint(mlogit_treatment))
 
 #pscore model - base, for stabilized weights that sum to study sample
+#this calculates the baseline prevalence of the treatment variable
 data3_mlogit<-data3%>%mutate(jobcontrol_q4=as.factor(jobcontrol_q4))
 data3_mlogit$jobcontrol_q4<-relevel(data3_mlogit$jobcontrol_q4,ref=1)
 mlogit_treatment_base<-multinom(jobcontrol_q4 ~ 1, data=data3_mlogit, na.action=na.exclude)
@@ -219,8 +231,9 @@ data5<-cbind(data4,fitted(mlogit_treatment_base,newdata=data3))%>%
 #DIAGNOSTICS#
 ##################################################
 
-#check region of common support
-  
+#check region of common support, i.e., positivity assumption
+#if there are regions outside of common support, then we could use pscore matching with calipers or restrict IPTW analysis to region of common support (or to pscores within 0.1 to 0.9), to reduce bias (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5564952)
+
   data5%>%filter(!is.na(jobcontrol_q4))%>%
     ggplot(aes(x = pscore_1, fill=jobcontrol_q4)) +
     geom_histogram(color = "white") + 
@@ -241,11 +254,20 @@ data5<-cbind(data4,fitted(mlogit_treatment_base,newdata=data3))%>%
     geom_histogram(color = "white") + 
     facet_wrap(~jobcontrol_q4)
 
+#also want to check the mean pscore or distribution of pscore by treatment, within strata of pscore
+
+#also want to assess balance of covariates across treatment groups using standardized differences or boxplots
+#standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
+#check balance in the unmatched sample, within strata of pscore, and within the IPTW weighted sample
+
 ##################################################
 #IPTW#
 ##################################################
 
 #generate IPTW - unstabilized and stabilized versions
+#for stabilized weights, multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)
+#use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr
+#note, this formula is the same, but in one line: generate iptw=(jobcontrol_binary/pscore) + ((1-jobcontrol_binary)/(1-pscore))
 data6<-data5%>%
   mutate(iptw_q4=if_else(jobcontrol_q4==1,1/pscore_1,
                          if_else(jobcontrol_q4==2,1/pscore_2,
@@ -261,7 +283,7 @@ data6<-data5%>%
 #check weights do not sum to study population (approximately twice the size)
 data6%>%summarize(iptw_q4_sum=sum(iptw_q4,na.rm = TRUE))
 
-#check stabilized weights sum to sudy population
+#check stabilized weights sum to study population
 data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 
 #can trim weights at the 1/99 percentiles
@@ -270,7 +292,7 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 #OUTCOME MODELS#
 ##################################################
 
-#outcome model with IPTW weights; note: drop missing data, as svyglm does not work with missing weights
+#outcome model (marginal structural model) with IPTW weights; note: drop missing data, as svyglm does not work with missing weights
 data7<-data6%>%filter(!is.na(iptw_q4))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data7)
 logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="quasibinomial", design=svydesign)
@@ -281,7 +303,7 @@ logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="qua
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
   lroc(logit_outcome)
 
-#outcome model with IPTW weights stabilized; note: drop missing data, as svyglm does not work with missing weights
+#outcome model (marginal structural model) with IPTW weights stabilized; note: drop missing data, as svyglm does not work with missing weights
 data7<-data6%>%filter(!is.na(iptw_stab_q4))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw_stab_q4, data=data7)
 logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="quasibinomial", design=svydesign)
@@ -292,7 +314,7 @@ logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="qua
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
   lroc(logit_outcome)
   
-#outcome model with IPTW weights - double robust with covariates used for pscore model; note: drop missing data, as svyglm does not work with missing weights
+#outcome model (marginal structural model) with IPTW weights - double robust with covariates used for pscore model; note: drop missing data, as svyglm does not work with missing weights
 data7<-data6%>%filter(!is.na(iptw_q4))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data7)
 logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4) + wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data7, family="quasibinomial", design=svydesign)
@@ -303,5 +325,40 @@ logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4) + wstdpsy + wstdsoc + ws
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
   lroc(logit_outcome)
 
-#can run regression models, direct adjustment with pscore, stratification by pscore, matching on pscore
-  
+#can also run regression models, direct adjustment with pscore, stratification by pscore, matching on pscore
+
+####################################################################################################
+####################################################################################################
+#FOR ILLUSTRATION - BINARY TREATMENT - SURVEY WEIGHTED#
+####################################################################################################
+####################################################################################################
+
+#pscore model with survey weights; could also incorporate survey weights as a covariate in the model
+#https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372
+#https://academic.oup.com/biostatistics/article/20/1/147/4780267
+#https://journals.sagepub.com/doi/full/10.1177/0193841X20938497
+#normally, na.action=na.exclude will pad rows with missing data with NA to allow merging with original data, but does not work with svyglm for some reason; to merge, must restrict sample first and then merge on index
+#must use quasibinomial for svyglm
+data3_subcohort<-data3%>%dplyr::select(jobcontrol_binary,wstdpsy,wstdsoc,wstdphy,wstdjin,geo_prv,dhh_sex,dhhgms,dhhghsz,dhhgdwe)%>%
+  na.omit()
+count(data3_subcohort)
+svydesign<-svydesign(id=~adm_rno, weights=~wts_m, data=data3_subcohort)
+svylogit<-svyglm(jobcontrol_binary ~ wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data3_subcohort, family="quasibinomial", design=svydesign)
+
+summary(svylogit)
+exp(cbind(OR = coef(svylogit), confint(svylogit)))
+#note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
+lroc(svylogit)
+
+#predict pscore and merge to full cohort
+data3_subcohort_pscore<-data3_subcohort
+data3_subcohort_pscore$pscore<-predict(svylogit,newdata=data3_subcohort,type="response")
+data3_subcohort_pscore<-data3_subcohort%>%dplyr::select(adm_rno,pscore)
+data4<-data3%>%left_join(data3_subcohort_pscore,by="adm_rno")
+rm(data3_subcohort,data3_subcohort_pscore)
+gc()
+
+#in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights
+#https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372
+#https://academic.oup.com/biostatistics/article/20/1/147/4780267
+#https://journals.sagepub.com/doi/full/10.1177/0193841X20938497

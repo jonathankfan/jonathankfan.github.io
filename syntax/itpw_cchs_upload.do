@@ -198,66 +198,66 @@ tab jobcontrol jobcontrol_q4, missing
 /*next, generate itpw weights using the propensity score*/
 /**************************************************/
 
-		/**************************************************/
-		/*itpw weights - unstabilized*/
-		/**************************************************/
+	/**************************************************/
+	/*itpw weights - unstabilized*/
+	/**************************************************/
 
-			/*use 1/1-pr for control group, which the same as using the reverse scored outcome to generate pr followed by 1/pr*/
-			/*note, this formula same, but in one line: generate iptw=(jobcontrol_binary/pscore) + ((1-jobcontrol_binary)/(1-pscore))*/
-			capture drop iptw
-			generate iptw=1/pscore if jobcontrol_binary==1
-			replace iptw=1/(1-pscore) if jobcontrol_binary==0
-			sum iptw, d
-			/*check total weighted population - this version does not sum to study population*/
-			dis `r(sum)'
+		/*use 1/1-pr for control group, which the same as using the reverse scored outcome to generate pr followed by 1/pr*/
+		/*note, this formula same as below, but in one line: generate iptw=(jobcontrol_binary/pscore) + ((1-jobcontrol_binary)/(1-pscore))*/
+		capture drop iptw
+		generate iptw=1/pscore if jobcontrol_binary==1
+		replace iptw=1/(1-pscore) if jobcontrol_binary==0
+		sum iptw, d
+		/*check total weighted population - this version does not sum to study population*/
+		dis `r(sum)'
 
-			/*in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights*/
-			/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
-			/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
-			/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
-			replace iptw=iptw*wts_m
+		/*in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights*/
+		/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
+		/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
+		/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
+		replace iptw=iptw*wts_m
 
-			/*apply weights for use in survey regression commands (to create IPTW weighted population)*/
-			svyset [pweight=iptw]
+		/*apply weights for use in survey regression commands (to create IPTW weighted population)*/
+		svyset [pweight=iptw]
 
-		/**************************************************/
-		/*itpw weights - stabilized version*/
-		/**************************************************/
+	/**************************************************/
+	/*itpw weights - stabilized version*/
+	/**************************************************/
 
-			/*this calculates the baseline prevalence of the treatment variable*/
-			logistic jobcontrol_binary
-			predict pscore_baseline, pr
-			sum pscore_baseline, d
-			tab jobcontrol_binary
+		/*this calculates the baseline prevalence of the treatment variable*/
+		logistic jobcontrol_binary
+		predict pscore_baseline, pr
+		sum pscore_baseline, d
+		tab jobcontrol_binary
 
-			/*multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)*/
-			/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
-			capture drop iptw_stab
-			generate iptw_stab=pscore_baseline/pscore if jobcontrol_binary==1
-			replace iptw_stab=(1-pscore_baseline)/(1-pscore) if jobcontrol_binary==0
-			sum iptw_stab, d
-			/*check total weighted population - this version sums to study population*/
-			dis `r(sum)'
+		/*multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)*/
+		/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
+		capture drop iptw_stab
+		generate iptw_stab=pscore_baseline/pscore if jobcontrol_binary==1
+		replace iptw_stab=(1-pscore_baseline)/(1-pscore) if jobcontrol_binary==0
+		sum iptw_stab, d
+		/*check total weighted population - this version sums to study population*/
+		dis `r(sum)'
 
-				scatter iptw iptw_stab
+			scatter iptw iptw_stab
 
-			/*apply weights*/
-			*svyset [pweight=iptw_stab]
+		/*apply weights*/
+		*svyset [pweight=iptw_stab]
 
-		/**************************************************/
-		/*can trim extreme weights*/
-		/**************************************************/
+	/**************************************************/
+	/*can trim extreme weights*/
+	/**************************************************/
 
-			sum iptw, d
-			capture drop iptw_trimmed
-			generate iptw_trimmed=iptw
-			replace iptw_trimmed=`r(p1)' if iptw_trimmed<`r(p1)'
-			replace iptw_trimmed=`r(p99)' if iptw_trimmed>`r(p99)' & iptw_trimmed!=.
-			sum iptw_trimmed, d
-			scatter iptw iptw_trimmed
+		sum iptw, d
+		capture drop iptw_trimmed
+		generate iptw_trimmed=iptw
+		replace iptw_trimmed=`r(p1)' if iptw_trimmed<`r(p1)'
+		replace iptw_trimmed=`r(p99)' if iptw_trimmed>`r(p99)' & iptw_trimmed!=.
+		sum iptw_trimmed, d
+		scatter iptw iptw_trimmed
 
-			/*apply weights*/
-			*svyset [pweight=iptw_trimmed]
+		/*apply weights*/
+		*svyset [pweight=iptw_trimmed]
 
 /**************************************************/
 /*assess balance of covariates across treatment groups - balance is achieved*/
@@ -277,7 +277,7 @@ tab jobcontrol jobcontrol_q4, missing
 	tab dhhghsz jobcontrol_binary, col nofreq chi2
 	tab dhhgdwe jobcontrol_binary, col nofreq chi2
 
-	/*standardized differences, which allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn*/
+	/*check standardized differences, which allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn*/
 	*stddiff wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex dhhgms dhhghsz dhhgdwe, by(jobcontrol_binary)
 
 		/*unmatched*/
@@ -466,11 +466,6 @@ tab jobcontrol jobcontrol_q4, missing
 	/*double robust iptw with covariates used for pscore model*/
 	svy: logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, nolog
 
-	/*matching*/
-	cem pscore, treatment(jobcontrol_binary)
-	tab cem_matched jobcontrol_binary, missing
-	logistic dep_yn jobcontrol_binary if cem_matched==1
-
 	/*
 	/*in region of common support*/
 	sum pscore if jobcontrol_binary==0
@@ -576,87 +571,87 @@ tab jobcontrol jobcontrol_q4, missing
 /*next, generate itpw weights using the propensity score*/
 /**************************************************/
 
-		/**************************************************/
-		/*itpw weights - unstabilized*/
-		/**************************************************/
+	/**************************************************/
+	/*itpw weights - unstabilized*/
+	/**************************************************/
 
-			/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
-			/*note, this formula same as above, but in one line: generate iptw=(jobcontrol_binary/pscore) + ((1-jobcontrol_binary)/(1-pscore))*/
-			capture drop iptw_q4
-			generate iptw_q4=1/pscore_1 if jobcontrol_q4==1
-			replace iptw_q4=1/pscore_2 if jobcontrol_q4==2
-			replace iptw_q4=1/pscore_3 if jobcontrol_q4==3
-			replace iptw_q4=1/pscore_4 if jobcontrol_q4==4
-			sum iptw_q4, d
-			/*check total weighted population - this version does not sum to study population*/
-			dis `r(sum)'	
+		/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
+		/*note, this formula same as below, but in one line: generate iptw=(jobcontrol_binary/pscore) + ((1-jobcontrol_binary)/(1-pscore))*/
+		capture drop iptw_q4
+		generate iptw_q4=1/pscore_1 if jobcontrol_q4==1
+		replace iptw_q4=1/pscore_2 if jobcontrol_q4==2
+		replace iptw_q4=1/pscore_3 if jobcontrol_q4==3
+		replace iptw_q4=1/pscore_4 if jobcontrol_q4==4
+		sum iptw_q4, d
+		/*check total weighted population - this version does not sum to study population*/
+		dis `r(sum)'	
 
-			/*in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights*/
-			/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
-			/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
-			/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
-			replace iptw_q4=iptw_q4*wts_m
+		/*in addition to using the survey weights in the propensity score model, multiply the IPTW weights by the survey weights*/
+		/*https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372*/
+		/*https://academic.oup.com/biostatistics/article/20/1/147/4780267*/
+		/*https://journals.sagepub.com/doi/full/10.1177/0193841X20938497*/
+		replace iptw_q4=iptw_q4*wts_m
 
-			/*apply weights for use in survey regression commands (to create IPTW weighted population)*/
-			svyset [pweight=iptw_q4]
+		/*apply weights for use in survey regression commands (to create IPTW weighted population)*/
+		svyset [pweight=iptw_q4]
 
-		/**************************************************/
-		/*itpw weights - stabilized*/
-		/**************************************************/
+	/**************************************************/
+	/*itpw weights - stabilized*/
+	/**************************************************/
 
-			/*this calculates the baseline prevalence of the treatment variable*/
+		/*this calculates the baseline prevalence of the treatment variable*/
 
-				/*use mlogit - note, predict commands use the same baseoutcome model (no need to run differently for each outcome), only need to change the predict syntax*/
-				tab jobcontrol_q4
-				mlogit jobcontrol_q4, baseoutcome(1)
-				capture drop pscore_1_base
-				predict pscore_1_base, pr equation(1)
-				sum pscore_1_base, d
-				capture drop pscore_2_base
-				predict pscore_2_base, pr equation(2)
-				sum pscore_2_base, d
-				capture drop pscore_3_base
-				predict pscore_3_base, pr equation(3)
-				sum pscore_3_base, d
-				capture drop pscore_4_base
-				predict pscore_4_base, pr equation(4)
-				sum pscore_4_base, d
+			/*use mlogit - note, predict commands use the same baseoutcome model (no need to run differently for each outcome), only need to change the predict syntax*/
+			tab jobcontrol_q4
+			mlogit jobcontrol_q4, baseoutcome(1)
+			capture drop pscore_1_base
+			predict pscore_1_base, pr equation(1)
+			sum pscore_1_base, d
+			capture drop pscore_2_base
+			predict pscore_2_base, pr equation(2)
+			sum pscore_2_base, d
+			capture drop pscore_3_base
+			predict pscore_3_base, pr equation(3)
+			sum pscore_3_base, d
+			capture drop pscore_4_base
+			predict pscore_4_base, pr equation(4)
+			sum pscore_4_base, d
 
-					/*scores for each individual add up to 1*/
-					generate temp=pscore_1_base+pscore_2_base+pscore_3_base+pscore_4_base
-					tab temp
-					drop temp
+				/*scores for each individual add up to 1*/
+				generate temp=pscore_1_base+pscore_2_base+pscore_3_base+pscore_4_base
+				tab temp
+				drop temp
 
-			/*multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)*/
-			/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
-			capture drop iptw_stab_q4
-			generate iptw_stab_q4=pscore_1_base/pscore_1 if jobcontrol_q4==1
-			replace iptw_stab_q4=pscore_2_base/pscore_2 if jobcontrol_q4==2
-			replace iptw_stab_q4=pscore_3_base/pscore_3 if jobcontrol_q4==3
-			replace iptw_stab_q4=pscore_4_base/pscore_4 if jobcontrol_q4==4
-			sum iptw_stab_q4, d
-			/*check total weighted population - this version sums to study population*/
-			dis `r(sum)'
+		/*multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)*/
+		/*use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr*/
+		capture drop iptw_stab_q4
+		generate iptw_stab_q4=pscore_1_base/pscore_1 if jobcontrol_q4==1
+		replace iptw_stab_q4=pscore_2_base/pscore_2 if jobcontrol_q4==2
+		replace iptw_stab_q4=pscore_3_base/pscore_3 if jobcontrol_q4==3
+		replace iptw_stab_q4=pscore_4_base/pscore_4 if jobcontrol_q4==4
+		sum iptw_stab_q4, d
+		/*check total weighted population - this version sums to study population*/
+		dis `r(sum)'
 
-				scatter iptw_q4 iptw_stab_q4
+			scatter iptw_q4 iptw_stab_q4
 
-			/*apply weights*/
-			*svyset [pweight=iptw_stab_q4]
+		/*apply weights*/
+		*svyset [pweight=iptw_stab_q4]
 
-		/**************************************************/
-		/*can trim extreme weights*/
-		/**************************************************/
+	/**************************************************/
+	/*can trim extreme weights*/
+	/**************************************************/
 
-			sum iptw_q4, d
-			capture drop iptw_q4_trimmed
-			generate iptw_q4_trimmed=iptw_q4
-			replace iptw_q4_trimmed=`r(p1)' if iptw_q4_trimmed<`r(p1)'
-			replace iptw_q4_trimmed=`r(p99)' if iptw_q4_trimmed>`r(p99)' & iptw_q4_trimmed!=.
-			sum iptw_q4_trimmed, d
-			scatter iptw_q4 iptw_q4_trimmed
+		sum iptw_q4, d
+		capture drop iptw_q4_trimmed
+		generate iptw_q4_trimmed=iptw_q4
+		replace iptw_q4_trimmed=`r(p1)' if iptw_q4_trimmed<`r(p1)'
+		replace iptw_q4_trimmed=`r(p99)' if iptw_q4_trimmed>`r(p99)' & iptw_q4_trimmed!=.
+		sum iptw_q4_trimmed, d
+		scatter iptw_q4 iptw_q4_trimmed
 
-			/*apply weights*/
-			*svyset [pweight=iptw_q4_trimmed]
+		/*apply weights*/
+		*svyset [pweight=iptw_q4_trimmed]
 
 /**************************************************/
 /*assess balance of covariates across treatment groups - balance is achieved*/
