@@ -140,6 +140,7 @@ data4%>%filter(!is.na(jobcontrol_binary))%>%
 #generate IPTW - unstabilized and stabilized versions
 #for stabilized weights, multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)
 #use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr
+#note, this formula is the same, but in one line: generate iptw=(treatment/pscore) + ((1-treatment)/(1-pscore))
 data5<-data4%>%
   mutate(iptw=if_else(jobcontrol_binary==1,1/pscore,if_else(jobcontrol_binary==0,1/(1-pscore),NA_real_)))%>%
   mutate(iptw_stab=if_else(jobcontrol_binary==1,pscore_base/pscore,if_else(jobcontrol_binary==0,(1-pscore_base)/(1-pscore),NA_real_)))
@@ -267,7 +268,7 @@ data5<-cbind(data4,fitted(mlogit_treatment_base,newdata=data3))%>%
 #generate IPTW - unstabilized and stabilized versions
 #for stabilized weights, multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)
 #use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr
-#note, this formula is the same, but in one line: generate iptw=(jobcontrol_binary/pscore) + ((1-jobcontrol_binary)/(1-pscore))
+#note, this formula is the same, but in one line: generate iptw=(treatment/pscore) + ((1-treatment)/(1-pscore))
 data6<-data5%>%
   mutate(iptw_q4=if_else(jobcontrol_q4==1,1/pscore_1,
                          if_else(jobcontrol_q4==2,1/pscore_2,
