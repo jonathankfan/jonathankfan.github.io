@@ -55,7 +55,7 @@ library(epiDisplay) #lroc
 library(survey) #surveyglm
 
 #install.packages("srvyr")
-library(srvyr) #allow survey weights with dplyr summarize
+library(srvyr) #allow survey weights with dplyr summarize using as_survey()
 
 #install.packages("tableone")
 library(tableone) #to create tables with standardized mean difference
@@ -172,13 +172,23 @@ data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
 #check balance in the unmatched sample, within strata of pscore, and within the IPTW weighted sample
 
   #unweighted
-  unweighted_mean<-data5%>%group_by(jobcontrol_binary)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),mean,na.rm=TRUE)
-  view(unweighted_mean)
-  unweighted_sd<-data5%>%group_by(jobcontrol_binary)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
-  view(unweighted_sd)
+  
+    unweighted_mean<-data5%>%
+      group_by(jobcontrol_binary)%>%
+      summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),mean,na.rm=TRUE)
+    view(unweighted_mean)
+    
+    unweighted_sd<-data5%>%
+      group_by(jobcontrol_binary)%>%
+      summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
+    view(unweighted_sd)
 
   #weighted
-  weighted_mean<-data5%>%filter(!is.na(iptw))%>%as_survey(weights=iptw)%>%group_by(jobcontrol_binary)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
+  weighted_mean<-data5%>%
+    filter(!is.na(iptw))%>%
+    as_survey(weights=iptw)%>%
+    group_by(jobcontrol_binary)%>%
+    summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
   view(weighted_mean)
   
 #standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
@@ -351,13 +361,23 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 #check balance in the unmatched sample, within strata of pscore, and within the IPTW weighted sample
 
   #unweighted
-  unweighted_mean<-data6%>%group_by(jobcontrol_q4)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),mean,na.rm=TRUE)
-  view(unweighted_mean)
-  unweighted_sd<-data6%>%group_by(jobcontrol_q4)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
-  view(unweighted_sd)
+
+    unweighted_mean<-data6%>%
+      group_by(jobcontrol_q4)%>%
+      summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),mean,na.rm=TRUE)
+    view(unweighted_mean)
+    
+    unweighted_sd<-data6%>%
+      group_by(jobcontrol_q4)%>%
+      summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
+    view(unweighted_sd)
   
   #weighted
-  weighted_mean<-data6%>%filter(!is.na(iptw_q4))%>%as_survey(weights=iptw_q4)%>%group_by(jobcontrol_q4)%>%summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
+  weighted_mean<-data6%>%
+    filter(!is.na(iptw_q4))%>%
+    as_survey(weights=iptw_q4)%>%
+    group_by(jobcontrol_q4)%>%
+    summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
   view(weighted_mean)
 
 #standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
