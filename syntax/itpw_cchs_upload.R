@@ -3,7 +3,7 @@
 ####################################################################################################
 #ABOUT#
 #This syntax provides supplementary analysis (with some modifications) for a published paper examining the relationship between psychosocial work conditions and mental health outcomes among workers, using data from the CCHS 2012 Mental Health survey.
-#The analysis below uses files from the Public Use Microdata Files. The orginal syntax files and raw data are located at the Statistics Canada Research Data Centre (Toronto), given privacy considerations.
+#The analysis below uses files from the Public Use Microdata Files. The original syntax files and raw data are located at the Statistics Canada Research Data Centre (Toronto), given privacy considerations.
 #The paper was published by Fan et al. (2019) in the Annals of Work Exposures and Health (2019;63(5):546-559).
 #See here for published paper: https://raw.githubusercontent.com/jonathankfan/jonathankfan.github.io/main/publications/Fan.2019.ANNWEH.pdf
 ####################################################################################################
