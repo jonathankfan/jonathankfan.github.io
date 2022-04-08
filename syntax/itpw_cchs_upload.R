@@ -55,7 +55,10 @@ library(epiDisplay) #lroc
 library(survey) #surveyglm
 
 #install.packages("srvyr")
-library(srvyr) #allow survey weights with dplyr summarize using as_survey()
+library(srvyr) #allow survey weights with dplyr summarize using as_survey(); wrapper for survey package
+
+#install.packages("survey")
+library(survey) #svyboxplot
 
 #install.packages("tableone")
 library(tableone) #to create tables with standardized mean difference
@@ -128,10 +131,15 @@ data4$pscore_base<-predict(logit_treatment_base,newdata=data3,type="response")
 
 #check region of common support, i.e., positivity assumption
 #if there are regions outside of common support, then we could use pscore matching with calipers or restrict IPTW analysis to region of common support (or to pscores within 0.1 to 0.9), to reduce bias (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5564952)
-data4%>%filter(!is.na(jobcontrol_binary))%>%
-  ggplot(aes(x = pscore, fill=jobcontrol_binary)) +
-  geom_histogram(color = "white") + 
-  facet_wrap(~jobcontrol_binary)
+
+  data4%>%filter(!is.na(jobcontrol_binary))%>%
+    ggplot(aes(x=pscore, fill=jobcontrol_binary)) +
+    geom_histogram(color="white") + 
+    facet_wrap(~jobcontrol_binary)
+  
+  data4%>%filter(!is.na(jobcontrol_binary))%>%
+    ggplot(aes(group=jobcontrol_binary, y=pscore)) +
+    geom_boxplot()
 
 #check the mean pscore or distribution of pscore by treatment, within strata of pscore
   
@@ -143,7 +151,7 @@ data4%>%filter(!is.na(jobcontrol_binary))%>%
 
   #pscore 0.7 to 0.79
   data4%>%filter(pscore>=.7 & pscore<.8)%>%group_by(jobcontrol_binary)%>%summarize(mean(pscore,na.rm=TRUE))
-
+  
 ##################################################
 #IPTW#
 ##################################################
@@ -183,14 +191,25 @@ data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
       summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
     view(unweighted_sd)
 
+    #boxplot; run for other covariates
+    data5%>%filter(!is.na(jobcontrol_binary))%>%
+      ggplot(aes(group=jobcontrol_binary, y=wstdpsy)) +
+      geom_boxplot()
+    
   #weighted
-  weighted_mean<-data5%>%
-    filter(!is.na(iptw))%>%
-    as_survey(weights=iptw)%>%
-    group_by(jobcontrol_binary)%>%
-    summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
-  view(weighted_mean)
-  
+      
+    weighted_mean<-data5%>%
+      filter(!is.na(iptw))%>%
+      as_survey(weights=iptw)%>%
+      group_by(jobcontrol_binary)%>%
+      summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
+    view(weighted_mean)
+
+    #boxplot; run for other covariates
+    data6<-data5%>%filter(!is.na(iptw))
+    svydesign<-svydesign(id=~adm_rno, weights=~iptw, data=data6)
+    svyboxplot(wstdpsy~as.factor(jobcontrol_binary),svydesign,all.outliers=TRUE)
+    
 #standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
 
   #unweighted
@@ -286,23 +305,23 @@ data5<-cbind(data4,fitted(mlogit_treatment_base,newdata=data3))%>%
 #if there are regions outside of common support, then we could use pscore matching with calipers or restrict IPTW analysis to region of common support (or to pscores within 0.1 to 0.9), to reduce bias (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5564952)
 
   data5%>%filter(!is.na(jobcontrol_q4))%>%
-    ggplot(aes(x = pscore_1, fill=jobcontrol_q4)) +
-    geom_histogram(color = "white") + 
+    ggplot(aes(x=pscore_1, fill=jobcontrol_q4)) +
+    geom_histogram(color="white") + 
     facet_wrap(~jobcontrol_q4)
     
   data5%>%filter(!is.na(jobcontrol_q4))%>%
-    ggplot(aes(x = pscore_2, fill=jobcontrol_q4)) +
-    geom_histogram(color = "white") + 
+    ggplot(aes(x=pscore_2, fill=jobcontrol_q4)) +
+    geom_histogram(color="white") + 
     facet_wrap(~jobcontrol_q4)
   
   data5%>%filter(!is.na(jobcontrol_q4))%>%
-    ggplot(aes(x = pscore_3, fill=jobcontrol_q4)) +
-    geom_histogram(color = "white") + 
+    ggplot(aes(x=pscore_3, fill=jobcontrol_q4)) +
+    geom_histogram(color="white") + 
     facet_wrap(~jobcontrol_q4)
   
   data5%>%filter(!is.na(jobcontrol_q4))%>%
-    ggplot(aes(x = pscore_4, fill=jobcontrol_q4)) +
-    geom_histogram(color = "white") + 
+    ggplot(aes(x=pscore_4, fill=jobcontrol_q4)) +
+    geom_histogram(color="white") + 
     facet_wrap(~jobcontrol_q4)
 
 #check the mean pscore or distribution of pscore by treatment, within strata of pscore
@@ -371,15 +390,26 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
       group_by(jobcontrol_q4)%>%
       summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
     view(unweighted_sd)
-  
-  #weighted
-  weighted_mean<-data6%>%
-    filter(!is.na(iptw_q4))%>%
-    as_survey(weights=iptw_q4)%>%
-    group_by(jobcontrol_q4)%>%
-    summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
-  view(weighted_mean)
+    
+    #boxplot; run for other covariates
+    data6%>%filter(!is.na(jobcontrol_q4))%>%
+      ggplot(aes(group=jobcontrol_q4, y=wstdpsy)) +
+      geom_boxplot()
 
+  #weighted
+      
+    weighted_mean<-data6%>%
+      filter(!is.na(iptw_q4))%>%
+      as_survey(weights=iptw_q4)%>%
+      group_by(jobcontrol_q4)%>%
+      summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),survey_mean,na.rm=TRUE)
+    view(weighted_mean)
+    
+    #boxplot; run for other covariates
+    data7<-data6%>%filter(!is.na(iptw_q4))
+    svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data7)
+    svyboxplot(wstdpsy~as.factor(jobcontrol_q4),svydesign,all.outliers=TRUE)
+    
 #standardized differences allow comparison of means without regard to units or scales, and without regard to sample size, and since we are not concerned with the population from which the sample was drawn
 
   #unweighted
@@ -387,8 +417,8 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
   print(unweighted,smd=TRUE)
   
   #weighted - this doesn't work - need to fix - but can manually calculate weighted SMD using weighted mean and weighted SD using the formula: smd = (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
-  #data6<-data5%>%filter(!is.na(iptw_q4))
-  #svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data6)
+  #data7<-data6%>%filter(!is.na(iptw_q4))
+  #svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data7)
   #weighted<-svyCreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_q4",data=svydesign,test=FALSE)
 
 ##################################################
