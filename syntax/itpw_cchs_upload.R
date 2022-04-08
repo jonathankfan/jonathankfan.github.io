@@ -111,6 +111,8 @@ logit_treatment<-glm(jobcontrol_binary ~ wstdpsy + wstdsoc + wstdphy + wstdjin +
   
   summary(logit_treatment)
   exp(cbind(OR = coef(logit_treatment), confint(logit_treatment)))
+
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
   lroc(logit_treatment)
 
 #pscore model - base, for stabilized weights that sum to study sample
@@ -216,7 +218,7 @@ data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
   unweighted<-CreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_binary",data=data5,test=FALSE)
   print(unweighted,smd=TRUE)
   
-  #weighted - this doesn't work - need to fix - but can manually calculate weighted SMD using weighted mean and weighted SD using the formula: smd = (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
+  #weighted - this syntax should work but doesn't - need to fix - but can manually calculate weighted SMD using weighted mean and weighted SD using the formula: smd = (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
   #data6<-data5%>%filter(!is.na(iptw))
   #svydesign<-svydesign(id=~adm_rno, weights=~iptw, data=data6)
   #weighted<-svyCreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_binary",data=svydesign,test=FALSE)
@@ -225,7 +227,10 @@ data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
 #OUTCOME MODELS#
 ##################################################
 
-#outcome model (marginal structural model) with IPTW weights
+#outcome model with IPTW weights
+#this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
+#a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
+#note: first, drop missing data, as svyglm does not work with missing weights
 data6<-data5%>%filter(!is.na(iptw))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw, data=data6)
 logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinomial", design=svydesign)
@@ -234,9 +239,14 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinom
   exp(coef(logit_outcome))
   confint(logit_outcome)
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
   lroc(logit_outcome)
 
-#outcome model (marginal structural model) with IPTW weights stabilized
+#outcome model with IPTW weights - stabilized version
+#this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
+#a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
+#note: first, drop missing data, as svyglm does not work with missing weights
 data6<-data5%>%filter(!is.na(iptw_stab))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw_stab, data=data6)
 logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinomial", design=svydesign)
@@ -245,9 +255,14 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinom
   exp(coef(logit_outcome))
   confint(logit_outcome)
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
   lroc(logit_outcome)
 
-#outcome model (marginal structural model) with IPTW weights - double robust with covariates used for pscore model 
+#outcome model with IPTW weights - double robust with covariates used for pscore model
+#this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
+#a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
+#note: first, drop missing data, as svyglm does not work with missing weights
 data6<-data5%>%filter(!is.na(iptw))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw, data=data6)
 logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary + wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data6, family="quasibinomial", design=svydesign)
@@ -256,9 +271,11 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary + wstdpsy + wstdsoc + wstdphy +
   exp(coef(logit_outcome))
   confint(logit_outcome)
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
   lroc(logit_outcome)
 
-#can also run regression models, direct adjustment with pscore, stratification by pscore, matching on pscore
+#can also calculate treatment effects using standard regression models, direct adjustment with pscore, stratification by pscore, or matching on pscore
 
 ####################################################################################################
 ####################################################################################################
@@ -416,7 +433,7 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
   unweighted<-CreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_q4",data=data6,test=FALSE)
   print(unweighted,smd=TRUE)
   
-  #weighted - this doesn't work - need to fix - but can manually calculate weighted SMD using weighted mean and weighted SD using the formula: smd = (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
+  #weighted - this syntax should work but doesn't - need to fix - but can manually calculate weighted SMD using weighted mean and weighted SD using the formula: smd = (`mean1'-`mean0')/((((`sd1'^2)+(`sd0'^2))/2)^(1/2))
   #data7<-data6%>%filter(!is.na(iptw_q4))
   #svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data7)
   #weighted<-svyCreateTableOne(vars=c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),strata="jobcontrol_q4",data=svydesign,test=FALSE)
@@ -425,7 +442,10 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 #OUTCOME MODELS#
 ##################################################
 
-#outcome model (marginal structural model) with IPTW weights; note: drop missing data, as svyglm does not work with missing weights
+#outcome model with IPTW weights
+#this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
+#a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
+#note: first, drop missing data, as svyglm does not work with missing weights
 data7<-data6%>%filter(!is.na(iptw_q4))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data7)
 logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="quasibinomial", design=svydesign)
@@ -434,9 +454,14 @@ logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="qua
   exp(coef(logit_outcome))
   confint(logit_outcome)
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
   lroc(logit_outcome)
 
-#outcome model (marginal structural model) with IPTW weights stabilized; note: drop missing data, as svyglm does not work with missing weights
+#outcome model with IPTW weights - stabilized version
+#this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
+#a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
+#note: first, drop missing data, as svyglm does not work with missing weights
 data7<-data6%>%filter(!is.na(iptw_stab_q4))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw_stab_q4, data=data7)
 logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="quasibinomial", design=svydesign)
@@ -445,9 +470,14 @@ logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="qua
   exp(coef(logit_outcome))
   confint(logit_outcome)
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
   lroc(logit_outcome)
   
-#outcome model (marginal structural model) with IPTW weights - double robust with covariates used for pscore model; note: drop missing data, as svyglm does not work with missing weights
+#outcome model with IPTW weights - double robust with covariates used for pscore model
+#this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
+#a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
+#note: first, drop missing data, as svyglm does not work with missing weights
 data7<-data6%>%filter(!is.na(iptw_q4))
 svydesign<-svydesign(id=~adm_rno, weights=~iptw_q4, data=data7)
 logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4) + wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data7, family="quasibinomial", design=svydesign)
@@ -456,9 +486,11 @@ logit_outcome<-svyglm(dep_yn ~ as.factor(jobcontrol_q4) + wstdpsy + wstdsoc + ws
   exp(coef(logit_outcome))
   confint(logit_outcome)
   exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
   lroc(logit_outcome)
 
-#can also run regression models, direct adjustment with pscore, stratification by pscore, matching on pscore
+#can also calculate treatment effects using standard regression models, direct adjustment with pscore, stratification by pscore, or matching on pscore
 
 ####################################################################################################
 ####################################################################################################
@@ -480,6 +512,7 @@ svylogit<-svyglm(jobcontrol_binary ~ wstdpsy + wstdsoc + wstdphy + wstdjin + as.
 
 summary(svylogit)
 exp(cbind(OR = coef(svylogit), confint(svylogit)))
+
 #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
 lroc(svylogit)
 
