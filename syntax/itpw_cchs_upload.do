@@ -384,28 +384,6 @@ tab jobcontrol jobcontrol_q4, missing
 	/*direct pscore adjustment using strata*/
 	logistic dep_yn jobcontrol_binary i.pscore_q5, robust
 
-	/*cem - matching on covariates with no pscore*/
-	/*note: should coarsen manually for nominal variables like geo_prv*/
-
-		/*run matching algorithm*/
-		cem wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex (#0) dhhgms (#0) dhhghsz dhhgdwe (#0) if jobcontrol_binary!=., treatment(jobcontrol_binary)
-		tab cem_weights
-		logistic dep_yn jobcontrol_binary [iweight=cem_weights], robust
-
-			/*double robust with covariates used for matching*/
-			logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe [iweight=cem_weights], robust
-
-		/*cem with pscore matching*/
-		cem pscore if jobcontrol_binary!=., treatment(jobcontrol_binary)
-		tab cem_weights
-		tab jobcontrol_binary cem_matched, missing
-		scatter pscore cem_strata
-		logistic dep_yn jobcontrol_binary i.cem_strata, robust
-		logistic dep_yn jobcontrol_binary [iweight=cem_weights], robust
-
-			/*double robust with covariates used for matching*/
-			logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe [iweight=cem_weights], robust
-
 	/*double robust pscore with covariates used for pscore model*/
 	logistic dep_yn jobcontrol_binary pscore wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, robust
 
@@ -455,14 +433,36 @@ tab jobcontrol jobcontrol_q4, missing
 		capture noisily assert iptw==_iptw
 
 		/*weights are the same as iptw manual*/
-		logistic dep_yn i.jobcontrol_binary [pweight=_mmws]
-		logistic dep_yn i.jobcontrol_binary [pweight=_iptw]
+		logistic dep_yn i.jobcontrol_binary [pweight=_mmws], robust
+		logistic dep_yn i.jobcontrol_binary [pweight=_iptw], robust
 		margins jobcontrol_binary
 		dis .0541224-.038796
 		marginsplot, plotopts(connect(i))
 		margins jobcontrol_binary, pwcompare(effects) mcompare(bonferroni)
 
-	/*double robust iptw with covariates used for pscore model*/
+	/*cem - matching on covariates with no pscore*/
+	/*note: should coarsen manually for nominal variables like geo_prv*/
+
+		/*run matching algorithm*/
+		cem wstdpsy wstdsoc wstdphy wstdjin geo_prv dhh_sex (#0) dhhgms (#0) dhhghsz dhhgdwe (#0) if jobcontrol_binary!=., treatment(jobcontrol_binary)
+		tab cem_weights
+		logistic dep_yn jobcontrol_binary [iweight=cem_weights], robust
+
+			/*double robust with covariates used for matching*/
+			logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe [iweight=cem_weights], robust
+
+		/*cem with pscore matching*/
+		cem pscore if jobcontrol_binary!=., treatment(jobcontrol_binary)
+		tab cem_weights
+		tab jobcontrol_binary cem_matched, missing
+		scatter pscore cem_strata
+		logistic dep_yn jobcontrol_binary i.cem_strata, robust
+		logistic dep_yn jobcontrol_binary [iweight=cem_weights], robust
+
+			/*double robust with covariates used for matching*/
+			logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe [iweight=cem_weights], robust
+
+	/*iptw adjustment - double robust with covariates used for pscore model*/
 	svy: logistic dep_yn jobcontrol_binary wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, nolog
 
 	/*
@@ -691,10 +691,10 @@ tab jobcontrol jobcontrol_q4, missing
 	logistic dep_yn i.jobcontrol_q4 wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
 
 	/*direct pscore adjustment*/
-	logistic dep_yn i.jobcontrol_q4 pscore_2 pscore_3 pscore_4
+	logistic dep_yn i.jobcontrol_q4 pscore_2 pscore_3 pscore_4, robust
 
 	/*double robust pscore with covariates used for pscore model*/
-	logistic dep_yn i.jobcontrol_q4 pscore_2 pscore_3 pscore_4 wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe
+	logistic dep_yn i.jobcontrol_q4 pscore_2 pscore_3 pscore_4 wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, robust
 
 	/*iptw adjustment*/
 	/*use robust estimator to account for the fact that the weights are estimated using estimated pscore; could also use bootstrap methods*/
@@ -743,12 +743,12 @@ tab jobcontrol jobcontrol_q4, missing
 		capture noisily assert iptw_q4==_iptw
 
 		/*weights are the same as iptw manual*/
-		logistic dep_yn i.jobcontrol_q4 [pweight=_mmws]
-		logistic dep_yn i.jobcontrol_q4 [pweight=_iptw]
+		logistic dep_yn i.jobcontrol_q4 [pweight=_mmws], robust
+		logistic dep_yn i.jobcontrol_q4 [pweight=_iptw], robust
 		margins jobcontrol_q4
 		dis .0656436-.0438357
 		marginsplot, plotopts(connect(i))
 		margins jobcontrol_q4, pwcompare(effects) mcompare(bonferroni)
 
-	/*double robust iptw with covariates used for pscore model*/
+	/*iptw adjustment - double robust with covariates used for pscore model*/
 	svy: logistic dep_yn i.jobcontrol_q4 wstdpsy wstdsoc wstdphy wstdjin i.geo_prv i.dhh_sex i.dhhgms i.dhhghsz i.dhhgdwe, nolog
