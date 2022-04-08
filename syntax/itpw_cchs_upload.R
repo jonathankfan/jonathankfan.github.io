@@ -509,12 +509,12 @@ data3_subcohort<-data3%>%dplyr::select(jobcontrol_binary,wstdpsy,wstdsoc,wstdphy
 count(data3_subcohort)
 svydesign<-svydesign(id=~adm_rno, weights=~wts_m, data=data3_subcohort)
 svylogit<-svyglm(jobcontrol_binary ~ wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data3_subcohort, family="quasibinomial", design=svydesign)
-
-summary(svylogit)
-exp(cbind(OR = coef(svylogit), confint(svylogit)))
-
-#note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
-lroc(svylogit)
+  
+  summary(svylogit)
+  exp(cbind(OR = coef(svylogit), confint(svylogit)))
+  
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
+  lroc(svylogit)
 
 #predict pscore and merge to full cohort
 data3_subcohort_pscore<-data3_subcohort
@@ -528,3 +528,6 @@ gc()
 #https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5802372
 #https://academic.oup.com/biostatistics/article/20/1/147/4780267
 #https://journals.sagepub.com/doi/full/10.1177/0193841X20938497
+
+#run remaining commands as in previous sections...
+
