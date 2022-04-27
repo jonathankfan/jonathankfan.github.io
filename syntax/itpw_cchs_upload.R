@@ -2,7 +2,7 @@
 ####################################################################################################
 ####################################################################################################
 #ABOUT#
-#This syntax provides supplementary analysis (with some modifications) for a published paper examining the relationship between psychosocial work conditions and mental health outcomes among workers, using data from the CCHS 2012 Mental Health survey.
+#This syntax generates propensity scores and IPTW weights for a published paper (with some modifications) that examined the relationship between psychosocial work conditions and mental health outcomes among workers, using data from the CCHS 2012 Mental Health survey.
 #The analysis below uses files from the Public Use Microdata Files. The original syntax files and raw data are located at the Statistics Canada Research Data Centre (Toronto), given privacy considerations.
 #The paper was published by Fan et al. (2019) in the Annals of Work Exposures and Health (2019;63(5):546-559).
 #See here for published paper: https://raw.githubusercontent.com/jonathankfan/jonathankfan.github.io/main/publications/Fan.2019.ANNWEH.pdf
@@ -42,7 +42,7 @@ library(cluster)
 library(mlogit) #mulinomial logistic models
 
 #install.packages("nnet")
-library(nnet) #mulinomial logistic models
+library(nnet) #mulinomial logistic models using multinom()
 
 library(tidyverse)  #data manipulation
 
@@ -63,11 +63,20 @@ library(survey) #svyboxplot
 #install.packages("tableone")
 library(tableone) #to create tables with standardized mean difference
 
+#install.packages("randomForest")
+library(randomForest) #random forest models
+
+#install.packages("caret")
+library(caret) #confusionMatrix()
+
+#install.packages("InformationValue")
+library(InformationValue) #optimalCutoff()
+
 ##################################################
 #LOAD CCHS 2012 MENTAL HEALTH SURVEY#
 ##################################################
 
-data1 <- read_dta("[FILEPATH]/cchs2012_mh_old.dta") 
+data1 <- read_dta("/cchs2012_mh_old.dta") 
 str(data1)
 glimpse(data1)
 count(data1)
@@ -159,18 +168,23 @@ data4$pscore_base<-predict(logit_treatment_base,newdata=data3,type="response")
 ##################################################
 
 #generate IPTW - unstabilized and stabilized versions
+#also calculate ITWP for ATT by multiplying the weights by the pscore (treated subjects are assigned a weight of 1, and controls are weighted by the odds of receiving treatment; this standardizes the treated and control populations to the reference treated population)
 #for stabilized weights, multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)
 #use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr
-#note, this formula is the same, but in one line: generate iptw=(treatment/pscore) + ((1-treatment)/(1-pscore))
+#note, we can use the following formula with one line (reduces to the same equations as below): generate iptw=(treatment/pscore) + ((1-treatment)/(1-pscore))
 data5<-data4%>%
   mutate(iptw=if_else(jobcontrol_binary==1,1/pscore,if_else(jobcontrol_binary==0,1/(1-pscore),NA_real_)))%>%
-  mutate(iptw_stab=if_else(jobcontrol_binary==1,pscore_base/pscore,if_else(jobcontrol_binary==0,(1-pscore_base)/(1-pscore),NA_real_)))
+  mutate(iptw_stab=if_else(jobcontrol_binary==1,pscore_base/pscore,if_else(jobcontrol_binary==0,(1-pscore_base)/(1-pscore),NA_real_)))%>%
+  mutate(iptw_att=if_else(jobcontrol_binary==1,1,if_else(jobcontrol_binary==0,pscore/(1-pscore),NA_real_)))
 
-#check weights do not sum to study population (approximately twice the size)
+#note that weights do not sum to study population (sums to approximately twice the size)
 data5%>%summarize(iptw_sum=sum(iptw,na.rm = TRUE))
 
-#check stabilized weights sum to study population
+#check that stabilized weights sum to study population
 data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
+
+#iptw-att weights
+data5%>%summarize(iptw_att_sum=sum(iptw_att,na.rm = TRUE))
 
 #can trim weights at the 1/99 percentiles to stabilize
 
@@ -183,11 +197,13 @@ data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
 
   #unweighted
   
+    #mean
     unweighted_mean<-data5%>%
       group_by(jobcontrol_binary)%>%
       summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),mean,na.rm=TRUE)
     view(unweighted_mean)
     
+    #sd
     unweighted_sd<-data5%>%
       group_by(jobcontrol_binary)%>%
       summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
@@ -200,6 +216,7 @@ data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
     
   #weighted
       
+    #mean
     weighted_mean<-data5%>%
       filter(!is.na(iptw))%>%
       as_survey(weights=iptw)%>%
@@ -226,7 +243,25 @@ data5%>%summarize(iptw_stab_sum=sum(iptw_stab,na.rm = TRUE))
 ##################################################
 #OUTCOME MODELS#
 ##################################################
+  
+#naive model, unadjusted
+data6<-data5%>%filter(!is.na(iptw))
+logit_outcome<-glm(dep_yn ~ jobcontrol_binary, data=data6, family="binomial")
 
+  summary(logit_outcome)
+  exp(coef(logit_outcome))
+  confint(logit_outcome)
+  exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+
+#regression model, adjusted
+data6<-data5%>%filter(!is.na(iptw))
+logit_outcome<-glm(dep_yn ~ jobcontrol_binary + wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data6, family="binomial")
+
+  summary(logit_outcome)
+  exp(coef(logit_outcome))
+  confint(logit_outcome)
+  exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
 #outcome model with IPTW weights
 #this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
 #a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
@@ -259,6 +294,22 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinom
   #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
   lroc(logit_outcome)
 
+#outcome model with IPTW weights - ATT version
+#this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
+#a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
+#note: first, drop missing data, as svyglm does not work with missing weights
+data6<-data5%>%filter(!is.na(iptw_att))
+svydesign<-svydesign(id=~adm_rno, weights=~iptw_att, data=data6)
+logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary, data=data6, family="quasibinomial", design=svydesign)
+
+  summary(logit_outcome)
+  exp(coef(logit_outcome))
+  confint(logit_outcome)
+  exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
+  #note: accuracy measures/c-statistics/auc are not useful for assessing peformance of the propensity score, as it is not a prediction score (see: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4213057); also, inclusion of non-confounders of the outcome relationship could increase c-statistic without decreasing bias in treatment-outcome relationship, and in the extreme case of a randomized trial, balance will be achieved with a specific propensity score model despite the c-statistic equal to only 0.5
+  lroc(logit_outcome)
+  
 #outcome model with IPTW weights - double robust with covariates used for pscore model
 #this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
 #a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
@@ -279,7 +330,7 @@ logit_outcome<-svyglm(dep_yn ~ jobcontrol_binary + wstdpsy + wstdsoc + wstdphy +
 
 ####################################################################################################
 ####################################################################################################
-#CATEGORICAL TREATMENT#
+#CATEGORICAL TREATMENT WITH MULTIPLE LEVELS#
 ####################################################################################################
 ####################################################################################################
 
@@ -368,7 +419,7 @@ data5<-cbind(data4,fitted(mlogit_treatment_base,newdata=data3))%>%
 #generate IPTW - unstabilized and stabilized versions
 #for stabilized weights, multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)
 #use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr
-#note, this formula is the same, but in one line: generate iptw=(treatment/pscore) + ((1-treatment)/(1-pscore))
+#note, we can use the following formula with one line (reduces to the same equations as below): generate iptw=(treatment/pscore) + ((1-treatment)/(1-pscore))
 data6<-data5%>%
   mutate(iptw_q4=if_else(jobcontrol_q4==1,1/pscore_1,
                          if_else(jobcontrol_q4==2,1/pscore_2,
@@ -381,10 +432,10 @@ data6<-data5%>%
                                          if_else(jobcontrol_q4==4,pscore_4_base/pscore_4,
                                                  NA_real_)))))
 
-#check weights do not sum to study population (approximately twice the size)
+#note that weights do not sum to study population (sums to approximately twice the size)
 data6%>%summarize(iptw_q4_sum=sum(iptw_q4,na.rm = TRUE))
 
-#check stabilized weights sum to study population
+#check that stabilized weights sum to study population
 data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 
 #can trim weights at the 1/99 percentiles to stabilize
@@ -398,11 +449,13 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 
   #unweighted
 
+    #mean
     unweighted_mean<-data6%>%
       group_by(jobcontrol_q4)%>%
       summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),mean,na.rm=TRUE)
     view(unweighted_mean)
     
+    #sd
     unweighted_sd<-data6%>%
       group_by(jobcontrol_q4)%>%
       summarize_at(c("wstdpsy","wstdsoc","wstdphy","wstdjin","geo_prv","dhh_sex","dhhgms","dhhghsz","dhhgdwe"),sd,na.rm=TRUE)
@@ -415,6 +468,7 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 
   #weighted
       
+    #mean
     weighted_mean<-data6%>%
       filter(!is.na(iptw_q4))%>%
       as_survey(weights=iptw_q4)%>%
@@ -442,6 +496,24 @@ data6%>%summarize(iptw_stab_q4_sum=sum(iptw_stab_q4,na.rm = TRUE))
 #OUTCOME MODELS#
 ##################################################
 
+#naive model, unadjusted
+data7<-data6%>%filter(!is.na(iptw_q4))
+logit_outcome<-glm(dep_yn ~ as.factor(jobcontrol_q4), data=data7, family="binomial")
+  
+  summary(logit_outcome)
+  exp(coef(logit_outcome))
+  confint(logit_outcome)
+  exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+
+#regression model, adjusted
+data7<-data6%>%filter(!is.na(iptw_q4))
+logit_outcome<-glm(dep_yn ~ as.factor(jobcontrol_q4) + wstdpsy + wstdsoc + wstdphy + wstdjin + as.factor(geo_prv) + as.factor(dhh_sex) + as.factor(dhhgms) + as.factor(dhhghsz) + as.factor(dhhgdwe), data=data7, family="binomial")
+
+  summary(logit_outcome)
+  exp(coef(logit_outcome))
+  confint(logit_outcome)
+  exp(cbind(OR = coef(logit_outcome), confint(logit_outcome)))
+  
 #outcome model with IPTW weights
 #this is deemed a marginal structural model given the use of a regression model rather than tabulation of weighted means; but tabulation could also be used to calculate treatment effects
 #a benefit of using svyglm is that it incorporates robust standard errors, to account for error in the specification of the propensity score model
@@ -530,4 +602,83 @@ gc()
 #https://journals.sagepub.com/doi/full/10.1177/0193841X20938497
 
 #run remaining commands as in previous sections...
+
+####################################################################################################
+####################################################################################################
+#FOR ILLUSTRATION - DIRECT STANDARDIZATION - SIMILAR TO IPTW ESTIMATES#
+####################################################################################################
+####################################################################################################
+
+##################################################
+#PROCESSING#
+##################################################
+
+data3_subcohort<-data3%>%dplyr::select(dep_yn,jobcontrol_binary,wstdpsy,wstdsoc,wstdphy,wstdjin,geo_prv,dhh_sex,dhhgms,dhhghsz,dhhgdwe)%>%
+  na.omit()%>%
+  mutate(jobcontrol_binary=as.factor(jobcontrol_binary),
+         geo_prv=as.factor(geo_prv),
+         dhh_sex=as.factor(dhh_sex),
+         dhhgms=as.factor(dhhgms),
+         dhhghsz=as.factor(dhhghsz),
+         dhhgdwe=as.factor(dhhgdwe)
+  )
+
+##################################################
+#CREATE LONG DATA FORMAT WITH STACKED COPIES OF THE DATA, BUT WITH TREATMENT ASSIGNED TO 0 OR 1#
+##################################################
+
+#create datasets with counterfactual treatment groups and covariates as observed
+
+#as observed
+data4a<-data3_subcohort%>%
+  mutate(filesource='TX')
+#non-exposed
+data4b<-data3_subcohort %>%
+  mutate(filesource='T0', jobcontrol_binary=0, dep_yn=NA)
+#exposed
+data4c<-data3_subcohort %>%
+  mutate(filesource='T1', jobcontrol_binary=1, dep_yn=NA)
+count(data4a)
+count(data4b)
+count(data4c)
+
+#stack the data
+data5 <- rbind (data4a,data4b,data4c)
+
+##################################################
+#MODEL#
+##################################################
+
+logit_outcome<-glm(dep_yn ~ jobcontrol_binary + wstdpsy + wstdsoc + wstdphy + wstdjin + geo_prv + dhh_sex + dhhgms + dhhghsz + dhhgdwe, family='binomial',data = data5)
+
+##################################################
+#PREDICTED PROBABILITY#
+##################################################
+
+#score the entire stacked dataset
+data5$pr.outcome <- predict(logit_outcome,data5,type="response")
+
+#mean probability for exposed counterfactual
+pr.outcome.T1<-data5%>%filter(filesource=="T1")%>%summarize(mean(pr.outcome))
+pr.outcome.T1
+
+#mean probability for non-exposed counterfactual
+pr.outcome.T0<-data5%>%filter(filesource=="T0")%>%summarize(mean(pr.outcome))
+pr.outcome.T0
+
+##################################################
+#TREATMENT EFFECTS#
+##################################################
+
+#RISK DIFFERENCE
+ATE=pr.outcome.T1 - pr.outcome.T0
+ATE
+
+#RELATIVE RISK
+RR=pr.outcome.T1/pr.outcome.T0
+RR
+
+#ODDS RATIO
+OR=(pr.outcome.T1/(1-pr.outcome.T1))/(pr.outcome.T0/(1-pr.outcome.T0))
+OR
 
