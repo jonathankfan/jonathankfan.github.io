@@ -168,7 +168,7 @@ data4$pscore_base<-predict(logit_treatment_base,newdata=data3,type="response")
 ##################################################
 
 #generate IPTW - unstabilized and stabilized versions
-#also calculate ITWP for ATT by multiplying the weights by the pscore (treated subjects are assigned a weight of 1, and controls are weighted by the odds of receiving treatment; this standardizes the treated and control populations to the reference treated population)
+#also calculate IPTW for ATT by multiplying the weights by the pscore (treated subjects are assigned a weight of 1, and controls are weighted by the odds of receiving treatment; this standardizes the treated and control populations to the reference treated population)
 #for stabilized weights, multiply the weights by the baseline prevalence of treatment and control in the overall sample (marginal probability of treatment)
 #use 1/1-pr for control group, which would be same as using the reverse scored outcome to generate pr followed by 1/pr
 #note, we can use the following formula with one line (reduces to the same equations as below): generate iptw=(treatment/pscore) + ((1-treatment)/(1-pscore))
