@@ -175,7 +175,7 @@ data4$pscore_base<-predict(logit_treatment_base,newdata=data3,type="response")
 data5<-data4%>%
   mutate(iptw=if_else(jobcontrol_binary==1,1/pscore,if_else(jobcontrol_binary==0,1/(1-pscore),NA_real_)))%>%
   mutate(iptw_stab=if_else(jobcontrol_binary==1,pscore_base/pscore,if_else(jobcontrol_binary==0,(1-pscore_base)/(1-pscore),NA_real_)))%>%
-  mutate(iptw_att=if_else(jobcontrol_binary==1,1,if_else(jobcontrol_binary==0,pscore/(1-pscore),NA_real_)))
+  mutate(iptw_att=if_else(jobcontrol_binary==1,pscore/pscore,if_else(jobcontrol_binary==0,pscore/(1-pscore),NA_real_)))
 
 #note that weights do not sum to study population (sums to approximately twice the size)
 data5%>%summarize(iptw_sum=sum(iptw,na.rm = TRUE))

@@ -19,7 +19,7 @@ ANALYSIS: RELATIONSHIP BETWEEN JOB CONTROL (CATEGORICAL TREATMENT VARIABLE) AND 
 /****************************************************************************************************/
 /*ABOUT*/
 /*
-This syntax provides supplementary analysis (with some modifications) for a published paper examining the relationship between psychosocial work conditions and mental health outcomes among workers, using data from the CCHS 2012 Mental Health survey.
+This syntax generates propensity scores and IPTW weights for a published paper (with some modifications) that examined the relationship between psychosocial work conditions and mental health outcomes among workers, using data from the CCHS 2012 Mental Health survey.
 The analysis below uses files from the Public Use Microdata Files. The original syntax files and raw data are located at the Statistics Canada Research Data Centre (Toronto), given privacy considerations.
 The paper was published by Fan et al. (2019) in the Annals of Work Exposures and Health (2019;63(5):546-559).
 See here for published paper: https://raw.githubusercontent.com/jonathankfan/jonathankfan.github.io/main/publications/Fan.2019.ANNWEH.pdf
@@ -73,6 +73,14 @@ count
 
 /*rename all variables to lowercase*/
 rename *, lower
+
+foreach var of varlist * {
+quietly levelsof `var', local(temp)
+local count: word count `temp'
+if `count'>50 {
+dis "`var': `count'"
+}
+}
 
 /********************************************************************************/
 /*Specify inclusion criteria*/
@@ -242,6 +250,23 @@ tab jobcontrol jobcontrol_q4, missing
 
 		/*apply weights*/
 		*svyset [pweight=iptw_stab]
+
+	/**************************************************/
+	/*itpw weights - ATT version*/
+	/**************************************************/
+
+		/*multiply the weights by the pscore (treated subjects are assigned a weight of 1, and controls are weighted by the odds of receiving treatment; this standardizes the treated and control populations to the reference treated population)*/
+		capture drop iptw_att
+		generate iptw_att=pscore/pscore if jobcontrol_binary==1
+		replace iptw_att=pscore/(1-pscore) if jobcontrol_binary==0
+		sum iptw_att, d
+		/*check total weighted population - this version sums to study population*/
+		dis `r(sum)'
+
+			scatter iptw iptw_att
+
+		/*apply weights*/
+		*svyset [pweight=iptw_att]
 
 	/**************************************************/
 	/*can trim extreme weights*/
