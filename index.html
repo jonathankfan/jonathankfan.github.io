@@ -1,14 +1,16 @@
 <!DOCTYPE html>
-<html><head>
+<html>
+<head>
 <meta http-equiv="content-type" content="text/html; charset=UTF-8">
-    <title>Jonathan Fan Resume CV</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jonathan Fan Resume CV</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="index_files/css.css">
     <link rel="stylesheet" href="index_files/font-awesome.css">
     <link rel="stylesheet" href="index_files/resume.css">
-    <link rel="stylesheet" href="index_files/all.css"> <!--"https://use.fontawesome.com/releases/v5.15.4/css/all.css"-->
-  </head>
+    <link rel="stylesheet" href="index_files/all.css">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.4/css/all.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
 
 <!--###############################################################################################-->
 <!--###############################################################################################-->
@@ -50,7 +52,31 @@ body {
   color: white;
 }
 
+.topnav .icon {
+  display: none;
+}
 
+@media screen and (max-width: 600px) {
+  .topnav a:not(:first-child) {display: none;}
+  .topnav a.icon {
+    float: right;
+    display: block;
+  }
+}
+
+@media screen and (max-width: 600px) {
+  .topnav.responsive {position: relative;}
+  .topnav.responsive a.icon {
+    position: absolute;
+    right: 0;
+    top: 0;
+  }
+  .topnav.responsive a {
+    float: none;
+    display: block;
+    text-align: left;
+  }
+}
 
 
 
@@ -84,18 +110,18 @@ body {
 
 
 </style>
-	
+</head>
 
 <!--###############################################################################################-->
 <!--###############################################################################################-->
 <!--###############################################################################################-->
 <!--###############################################################################################-->
 
-  <body>
-  
+<body>
 
-<div class="topnav">
-	<a class="active" href="#top">About</a>
+
+<div class="topnav" id="myTopnav">
+	<a href="#top" class="active">About</a>
 	<a href="#skills">Skills</a>
 	<a href="#experience">Experience</a>
 	<a href="#education">Education</a>
@@ -103,8 +129,21 @@ body {
 	<a href="#academic">Academic</a>
 	<a href="#projects">Projects</a>
 	<a href="#additional">Additional</a>
+	<a href="javascript:void(0);" class="icon" onclick="myFunction()"><i class="fa fa-bars"></i></a>
 </div>
 
+
+<!--Toggle between adding and removing the "responsive" class to topnav when the user clicks on the icon-->
+<script>
+function myFunction() {
+  var x = document.getElementById("myTopnav");
+  if (x.className === "topnav") {
+    x.className += " responsive";
+  } else {
+    x.className = "topnav";
+  }
+}
+</script>
 
  <!-- 
 <div class="sidenav">
@@ -134,7 +173,7 @@ body {
 		  <div class="contact-item">
             
             <a href="https://www.linkedin.com/in/jonathankfan" target="_blank">
-            <i class="fa fa-linkedin" style="font-size:12px;"></i> LinkedIn
+            <i class="fa-brands fa-linkedin-in" style="font-size:12px;"></i> LinkedIn
             </a>
             
           </div>
@@ -143,17 +182,16 @@ body {
 		  
           <div class="contact-item">
             <a href="https://scholar.google.com/citations?hl=en&user=aoDfW8oAAAAJ" target="_blank">
-            <i class="fa fa-google" style="font-size:12px;"></i> Google Scholar
+            <i class="fa-brands fa-google" style="font-size:12px;"></i> Google Scholar
             </a>
           </div>
 		  		  
 
 
-	          
           <div class="contact-item">
             
             <a href="https://github.com/jonathankfan" target="_blank">
-            <i class="fa fa-github" style="font-size:12px;"></i> Github
+            <i class="fab fa-github" style="font-size:12px;"></i> Github
             </a>
             
           </div>
@@ -178,7 +216,7 @@ body {
           <div class="contact-item">
             
             <a href="https://jonathanfan.shinyapps.io/labourforcesurvey/" target="_blank">
-            <i class="fa fa-chart-line" style="font-size:12px;"></i> Labour Force Dashboard (R Shiny)
+            <i class="fas fa-chart-line" style="font-size:12px;"></i> Labour Force Dashboard (R Shiny)
             </a>
 
           </div> 
@@ -187,7 +225,7 @@ body {
 		  
 		            <div class="contact-item">
             <a href="https://tspace.library.utoronto.ca/bitstream/1807/103580/1/Fan_Jonathan_202011_PhD_thesis.pdf" target="_blank">
-            <i class="fa fa-file" style="font-size:12px;"></i> PhD Thesis (UofT, 2020)
+            <i class="fa-solid fa-file-pdf" style="font-size:12px;"></i> PhD Thesis (UofT, 2020)
             </a>
           </div>
 		  	
@@ -196,7 +234,7 @@ body {
 			
           <div class="contact-item">
             <a href="https://raw.githubusercontent.com/jonathankfan/jonathankfan.github.io/main/files/Fan.Jonathan.Resume.2022.April.pdf" target="_blank">
-            <i class="fa fa-file" style="font-size:12px;"></i> Download PDF Resume
+            <i class="fa-solid fa-file-pdf" style="font-size:12px;"></i> Download PDF Resume
             </a>
           </div>
           
@@ -1234,7 +1272,7 @@ LINKS: <br>
       <a href="https://jonathankfan.github.io">Jonathan Fan</a> <br>
 
 <div class="block-content">
-Last updated: April 2022<br>
+Last updated: September 2022<br>
 </div>
 
       <a href="https://jonathankfan.github.io">( Return to top )</a> <br>
@@ -1251,6 +1289,14 @@ Last updated: April 2022<br>
 <!--###############################################################################################-->
 <!--###############################################################################################-->
 
-</body></html>
+
+
+<!--###############################################################################################-->
+<!--###############################################################################################-->
+<!--###############################################################################################-->
+<!--###############################################################################################-->
+
+</body>
+</html>
 
 <!--source: https://crispgm.github.io/resume/resume.html-->
